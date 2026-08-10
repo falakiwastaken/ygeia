@@ -138,6 +138,306 @@
     });
   }
 
+  // ================================================================== rank
+
+  /**
+   * Gather everything the rating needs. PRs are counted by walking each exercise in
+   * chronological order and tallying every time the best estimated 1RM improved, which
+   * is the honest count rather than "number of exercises trained".
+   */
+  async function evaluateRank() {
+    const [settings, allSets, workouts, sportSessions, latestWeight] = await Promise.all([
+      V.store.settings.get(),
+      V.store.db.all('sets'),
+      V.store.workouts.all(),
+      V.store.sports.all(),
+      V.store.metrics.latest('weight'),
+    ]);
+
+    const finished = workouts.filter((w) => w.finishedAt);
+    const finishedIds = new Set(finished.map((w) => w.id));
+    const startedAt = {};
+    for (const w of finished) startedAt[w.id] = w.startedAt;
+
+    const setsByExercise = {};
+    let totalWorkingSets = 0;
+    for (const s of allSets) {
+      if (!s.completed || !finishedIds.has(s.workoutId)) continue;
+      if (s.type !== 'warmup') totalWorkingSets++;
+      (setsByExercise[s.exerciseId] = setsByExercise[s.exerciseId] || []).push(s);
+    }
+
+    let prCount = 0;
+    for (const exId in setsByExercise) {
+      const ordered = setsByExercise[exId]
+        .filter((s) => s.type !== 'warmup')
+        .sort((a, b) => (startedAt[a.workoutId] || 0) - (startedAt[b.workoutId] || 0));
+      let best = 0;
+      for (const s of ordered) {
+        const e = V.domain.estimate1RM(s.weightKg, s.reps);
+        if (e > best) { best = e; prCount++; }
+      }
+    }
+
+    return V.rank.evaluate({
+      setsByExercise,
+      bodyweightKg: latestWeight ? latestWeight.value : settings.weightKg,
+      sex: settings.sex,
+      workoutCount: finished.length,
+      sportCount: sportSessions.length,
+      prCount,
+      totalWorkingSets,
+    });
+  }
+
+  async function buildRankCard() {
+    const ev = await evaluateRank();
+    const tier = ev.tier;
+    const prog = ev.progress;
+
+    const children = [
+      V.el('div', { className: 'grid-2' }, [
+        V.ui.stat({ label: 'Rating', value: ev.rating == null ? '–' : String(ev.rating) }),
+        V.ui.stat({ label: 'Level', value: String(ev.level.level) }),
+      ]),
+    ];
+
+    if (prog && prog.next) {
+      children.push(V.el('div', { style: { height: '12px' } }));
+      children.push(
+        V.el('div', { className: 'macro-row' }, [
+          V.el('span', { text: tier.name }),
+          V.el('span', { className: 'num', text: prog.pointsToNext + ' to ' + prog.next.name }),
+        ]),
+      );
+      children.push(V.ui.bar(prog.pct, 100, tier.color));
+    }
+
+    children.push(V.el('div', { style: { height: '10px' } }));
+    children.push(
+      V.el('div', { className: 'macro-row' }, [
+        V.el('span', { text: 'Level ' + ev.level.level }),
+        V.el('span', { className: 'num', text: ev.level.into + ' / ' + ev.level.needed + ' XP' }),
+      ]),
+    );
+    children.push(V.ui.bar(ev.level.pct, 100, 'var(--nutrition)'));
+
+    children.push(V.el('div', { style: { height: '12px' } }));
+    children.push(
+      V.ui.button(
+        ev.rating == null ? 'How ranking works' : 'View rank breakdown',
+        () => openRankSheet(),
+        'btn-ghost',
+      ),
+    );
+
+    if (ev.rating == null) {
+      children.push(
+        V.el('div', {
+          className: 'hint',
+          text: 'Log a squat, bench, deadlift or overhead press to get rated.',
+        }),
+      );
+    }
+
+    return V.ui.card({
+      title: tier.name,
+      sub: ev.rating == null ? 'Unranked' : 'Strength rank',
+      action: V.el('div', { className: 'stat-value', style: { color: tier.color }, text: ev.rating == null ? '–' : String(ev.rating) }),
+      children,
+    });
+  }
+
+  function openRankSheet() {
+    V.ui.sheet('Rank', async (body) => {
+      const ev = await evaluateRank();
+      const settings = await V.store.settings.get();
+      const exercises = await V.store.exercises.all();
+      const exById = {};
+      for (const e of exercises) exById[e.id] = e;
+
+      body.appendChild(
+        V.el('div', { className: 'grid-3' }, [
+          V.ui.stat({ label: 'Rating', value: ev.rating == null ? '–' : String(ev.rating) }),
+          V.ui.stat({ label: 'Rank', value: ev.tier.name }),
+          V.ui.stat({ label: 'Total XP', value: V.fmt(ev.totalXp) }),
+        ]),
+      );
+
+      // ---- Rated lifts -----------------------------------------------------
+      if (ev.liftScores.length) {
+        body.appendChild(V.ui.sectionTitle('Your rated lifts'));
+        body.appendChild(
+          V.ui.list(
+            ev.liftScores.map((l, i) =>
+              V.ui.row({
+                title: (exById[l.exerciseId] || {}).name || l.exerciseId,
+                sub: `${V.fmt(l.oneRM, 1)} kg est. 1RM · ${V.fmt(l.ratio, 2)}× bodyweight` +
+                     (i < 3 ? ' · counted' : ' · not counted'),
+                value: String(l.score),
+              }),
+            ),
+          ),
+        );
+        body.appendChild(
+          V.el('div', {
+            className: 'hint',
+            text: 'Your best three rated lifts are averaged. Rating one lift alone is ' +
+                  'capped, so breadth counts — but you are never punished for a lift you ' +
+                  'have simply never trained.',
+          }),
+        );
+      } else {
+        body.appendChild(V.ui.empty('No rated lifts yet.'));
+      }
+
+      // ---- Ladder ----------------------------------------------------------
+      body.appendChild(V.ui.sectionTitle('The ladder'));
+      body.appendChild(
+        V.ui.list(
+          V.rank.TIERS.map((t) =>
+            V.ui.row({
+              title: t.name,
+              sub: t.min === 0 ? 'Starting rank' : `${t.min}+ rating`,
+              value: ev.rating != null && ev.rating >= t.min ? '✓' : '',
+              accessory: V.el('div', { className: 'subject-dot', style: { background: t.color } }),
+            }),
+          ),
+        ),
+      );
+
+      // ---- XP ---------------------------------------------------------------
+      body.appendChild(V.ui.sectionTitle('How XP is earned'));
+      body.appendChild(
+        V.ui.list([
+          V.ui.row({ title: 'Finishing a workout', value: '+' + V.rank.XP.perSession }),
+          V.ui.row({ title: 'Each working set', value: '+' + V.rank.XP.perWorkingSet }),
+          V.ui.row({ title: 'Setting a PR', value: '+' + V.rank.XP.perPR }),
+          V.ui.row({ title: 'A sport session', value: '+' + V.rank.XP.perSportSession }),
+        ]),
+      );
+
+      body.appendChild(
+        V.el('div', {
+          className: 'hint',
+          text: 'Rating measures strength against published standards for your bodyweight' +
+                (settings.sex === 'female' ? ' and sex' : '') +
+                '. It moves slowly, because real strength does. XP moves every session, so ' +
+                'showing up is rewarded even when the bar is not going up yet. Both are ' +
+                'computed on your device from your own logs — nothing is compared to other users.',
+        }),
+      );
+    });
+  }
+
+  // ============================================================ sport logging
+
+  function openSportSheet(settings) {
+    V.ui.sheet('Log a session', (body) => {
+      let sport = V.life.SPORTS[0];
+      let intensity = 'moderate';
+      let category = 'cardio';
+
+      const duration = V.ui.input({ type: 'number', step: '5', value: '45' });
+      const out = V.el('div');
+
+      const catWrap = V.el('div');
+      const sportWrap = V.el('div');
+      const intWrap = V.el('div');
+
+      function renderOut() {
+        const kcal = V.life.sportCalories(
+          sport.met, V.ui.num(duration, 0), settings.weightKg, intensity,
+        );
+        out.innerHTML = '';
+        out.appendChild(
+          V.el('div', { className: 'grid-2' }, [
+            V.ui.stat({ label: 'Energy cost', value: V.fmt(kcal), unit: ' kcal' }),
+            V.ui.stat({ label: 'Training load', value: V.fmt(sport.met * V.ui.num(duration, 0)), unit: ' MET-min' }),
+          ]),
+        );
+        out.appendChild(
+          V.el('div', {
+            className: 'hint',
+            text: 'This is total energy burned, including the calories you would have burned ' +
+                  'resting anyway. Your daily target already accounts for your activity level, ' +
+                  'so do NOT eat these back on top — that is the most common way calorie ' +
+                  'tracking goes wrong.',
+          }),
+        );
+      }
+
+      function renderSports() {
+        const list = V.life.SPORTS.filter((x) => x.category === category);
+        if (!list.includes(sport)) sport = list[0];
+        sportWrap.innerHTML = '';
+        sportWrap.appendChild(
+          V.ui.segmented(
+            list.map((x) => ({ value: x.id, label: x.name })),
+            sport.id,
+            (v) => { sport = V.life.SPORTS.find((x) => x.id === v); renderSports(); renderOut(); },
+          ),
+        );
+      }
+
+      function renderCats() {
+        catWrap.innerHTML = '';
+        catWrap.appendChild(
+          V.ui.segmented(
+            Object.keys(V.life.SPORT_CATEGORY_LABEL).map((k) => ({ value: k, label: V.life.SPORT_CATEGORY_LABEL[k] })),
+            category,
+            (v) => { category = v; renderCats(); renderSports(); renderOut(); },
+          ),
+        );
+      }
+
+      function renderInt() {
+        intWrap.innerHTML = '';
+        intWrap.appendChild(
+          V.ui.segmented(
+            V.life.INTENSITY.map((i) => ({ value: i.value, label: i.label })),
+            intensity,
+            (v) => { intensity = v; renderInt(); renderOut(); },
+          ),
+        );
+      }
+
+      duration.addEventListener('input', renderOut);
+
+      body.appendChild(V.ui.field('Type', catWrap));
+      body.appendChild(V.ui.field('Activity', sportWrap));
+      body.appendChild(V.ui.field('Duration (minutes)', duration));
+      body.appendChild(V.ui.field('Effort', intWrap));
+      body.appendChild(out);
+
+      renderCats(); renderSports(); renderInt(); renderOut();
+
+      body.appendChild(V.el('div', { style: { height: '16px' } }));
+      body.appendChild(
+        V.ui.button('Save session', async () => {
+          const mins = V.ui.num(duration, 0);
+          if (mins <= 0) return V.toast('Enter a duration');
+
+          await V.store.sports.save({
+            id: V.uid(),
+            date: V.app.state.date,
+            startedAt: Date.now(),
+            sport: sport.name,
+            sportId: sport.id,
+            met: sport.met,
+            durationMin: mins,
+            intensity,
+            calories: Math.round(V.life.sportCalories(sport.met, mins, settings.weightKg, intensity)),
+          });
+
+          V.ui.closeSheet();
+          V.toast('Session logged');
+          V.app.render();
+        }, 'btn-primary'),
+      );
+    });
+  }
+
   // ============================================================ exercise pick
 
   function openExercisePicker(onPick) {
@@ -420,6 +720,9 @@
         return root;
       }
 
+      // ---- Rank -------------------------------------------------------------
+      root.appendChild(await buildRankCard());
+
       // ---- Start ------------------------------------------------------------
       root.appendChild(
         V.ui.card({
@@ -441,6 +744,48 @@
           ],
         }),
       );
+
+      // ---- Sport sessions ---------------------------------------------------
+      const settings = await V.store.settings.get();
+      const weekDates = V.lastNDays(7);
+      const allSports = await V.store.sports.all();
+      const weekSports = allSports.filter((x) => weekDates.includes(x.date));
+      const metMin = V.life.metMinutes(weekSports);
+      const band = V.life.loadBand(metMin);
+
+      root.appendChild(
+        V.ui.card({
+          title: 'Sport & cardio',
+          sub: weekSports.length
+            ? `${weekSports.length} session(s) this week · ${V.fmt(metMin)} MET-min`
+            : 'Nothing logged this week',
+          action: weekSports.length
+            ? V.el('div', { className: 'hint', style: { color: band.color }, text: band.label })
+            : null,
+          children: [V.ui.button('Log a session', () => openSportSheet(settings), 'btn-primary')],
+        }),
+      );
+
+      const todaySports = allSports.filter((x) => x.date === state.date);
+      if (todaySports.length) {
+        root.appendChild(
+          V.ui.list(
+            todaySports.map((x) =>
+              V.ui.row({
+                title: x.sport,
+                sub: `${x.durationMin} min · ${x.intensity}`,
+                value: V.fmt(x.calories) + ' kcal',
+                onClick: async () => {
+                  if (!V.confirm(`Delete this ${x.sport} session?`)) return;
+                  await V.store.sports.remove(x.id);
+                  V.toast('Deleted');
+                  V.app.render();
+                },
+              }),
+            ),
+          ),
+        );
+      }
 
       // ---- History ----------------------------------------------------------
       const recent = await V.store.workouts.recent(20);

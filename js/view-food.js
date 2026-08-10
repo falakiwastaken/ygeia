@@ -43,7 +43,7 @@
         preview.appendChild(V.ui.stat({ label: 'Protein', value: V.fmt(n.protein, 1), unit: 'g' }));
         preview.appendChild(V.ui.stat({ label: 'Carbs', value: V.fmt(n.carbs, 1), unit: 'g' }));
         preview.appendChild(V.ui.stat({ label: 'Fat', value: V.fmt(n.fat, 1), unit: 'g' }));
-        if (n.fiber != null) preview.appendChild(V.ui.stat({ label: 'Fibre', value: V.fmt(n.fiber, 1), unit: 'g' }));
+        if (n.fiber != null) preview.appendChild(V.ui.stat({ label: 'Fiber', value: V.fmt(n.fiber, 1), unit: 'g' }));
         if (n.sodium != null) preview.appendChild(V.ui.stat({ label: 'Sodium', value: V.fmt(n.sodium), unit: 'mg' }));
       }
 
@@ -230,7 +230,7 @@
   function openCustomFoodSheet(meal) {
     V.ui.sheet('Custom food', (body) => {
       const f = {
-        name: V.ui.input({ placeholder: 'e.g. Mum’s lasagne' }),
+        name: V.ui.input({ placeholder: 'Name' }),
         brand: V.ui.input({ placeholder: 'Optional' }),
         kcal: V.ui.input({ type: 'number', placeholder: '0' }),
         protein: V.ui.input({ type: 'number', placeholder: '0' }),
@@ -248,7 +248,7 @@
         V.ui.field('Protein (g)', f.protein),
         V.ui.field('Carbs (g)', f.carbs),
         V.ui.field('Fat (g)', f.fat),
-        V.ui.field('Fibre (g)', f.fiber),
+        V.ui.field('Fiber (g)', f.fiber),
         V.ui.field('One serving (g)', f.serving),
       ]));
 
@@ -392,6 +392,8 @@
 
       root.appendChild(V.el('div', { style: { height: '16px' } }));
       root.appendChild(V.ui.button('Add food', () => openSearchSheet(defaultMeal()), 'btn-primary'));
+      root.appendChild(V.el('div', { style: { height: '8px' } }));
+      root.appendChild(V.ui.button('Find somewhere to eat', () => V.places.openPlacesSheet(), 'btn-ghost'));
 
       // ---- Score breakdown --------------------------------------------------
       if (scored.score != null && scored.components.length) {

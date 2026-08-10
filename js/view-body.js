@@ -197,6 +197,66 @@
       const settings = await V.store.settings.get();
       const root = V.el('div');
 
+      // ---- Body composition -------------------------------------------------
+      const [latestWeight, latestBf] = await Promise.all([
+        V.store.metrics.latest('weight'),
+        V.store.metrics.latest('body_fat_pct'),
+      ]);
+      const weightKg = latestWeight ? latestWeight.value : settings.weightKg;
+      const bfPct = latestBf ? latestBf.value : null;
+
+      const bmi = V.life.bmi(weightKg, settings.heightCm);
+      const bmiCat = V.life.bmiCategory(bmi);
+      const ffmi = V.life.ffmi(weightKg, settings.heightCm, bfPct);
+
+      if (bmi != null) {
+        const tiles = [
+          V.ui.stat({ label: 'BMI', value: V.fmt(bmi, 1) }),
+        ];
+        if (ffmi) {
+          const band = V.life.ffmiBand(ffmi.normalised, settings.sex);
+          tiles.push(V.ui.stat({ label: 'FFMI', value: V.fmt(ffmi.normalised, 1) }));
+          tiles.push(V.ui.stat({ label: 'Lean mass', value: V.fmt(V.kgToDisplay(V.life.leanMass(weightKg, bfPct), settings.weightUnit), 1), unit: ' ' + settings.weightUnit }));
+          void band;
+        }
+
+        const children = [V.el('div', { className: 'grid-3' }, tiles)];
+
+        children.push(
+          V.el('div', {
+            className: 'hint',
+            style: { color: bmiCat.color },
+            text: bmiCat.label,
+          }),
+        );
+
+        if (ffmi) {
+          const band = V.life.ffmiBand(ffmi.normalised, settings.sex);
+          children.push(
+            V.el('div', { className: 'hint', style: { color: band.color }, text: 'FFMI: ' + band.label }),
+          );
+        }
+
+        children.push(V.el('div', { className: 'hint', text: V.life.bmiCaveat(bmi, bfPct) }));
+
+        root.appendChild(V.ui.card({ title: 'Body composition', children }));
+      }
+
+      // ---- Weight cut -------------------------------------------------------
+      const activeCut = await V.store.cuts.active();
+      root.appendChild(
+        V.ui.list([
+          V.ui.row({
+            title: 'Weight cut',
+            sub: activeCut
+              ? `${activeCut.name} · weigh-in ${V.friendlyDate(V.dateKey(new Date(activeCut.weighInAt)))}`
+              : 'For combat sports — plan a cut safely',
+            value: activeCut ? '●' : '›',
+            onClick: () => (activeCut ? V.cutView.openCutSheet() : V.cutView.openNewCutSheet()),
+          }),
+        ]),
+      );
+
       const rows = [];
       let anyData = false;
 

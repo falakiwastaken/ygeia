@@ -14,7 +14,7 @@
     },
   };
 
-  const VIEW_IDS = ['today', 'food', 'train', 'body', 'settings'];
+  const VIEW_IDS = ['today', 'food', 'train', 'study', 'body', 'settings'];
 
   // ------------------------------------------------------------ rendering --
 
@@ -74,8 +74,15 @@
   app.applyTheme = async function () {
     const s = await V.store.settings.get();
     const root = document.documentElement;
-    if (s.theme === 'auto') root.removeAttribute('data-theme');
-    else root.setAttribute('data-theme', s.theme);
+    // Always set the attribute: the stylesheet's prefers-color-scheme rule is scoped to
+    // [data-theme="auto"], so that "Auto" only follows the OS when explicitly chosen.
+    root.setAttribute('data-theme', s.theme || 'light');
+
+    // Keep the iOS status bar and Android chrome in step with the active palette.
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) {
+      meta.setAttribute('content', getComputedStyle(root).getPropertyValue('--bg').trim() || '#F6F2E8');
+    }
   };
 
   // -------------------------------------------------------------- seeding --

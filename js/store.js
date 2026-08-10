@@ -13,7 +13,9 @@
   'use strict';
 
   const DB_NAME = 'vitals';
-  const DB_VERSION = 1;
+  // v2 added lifestyle tracking: sports, sleep, study, weight cuts and saved places.
+  // The upgrade only creates new stores, so existing data survives untouched.
+  const DB_VERSION = 2;
 
   /** store name -> { keyPath, indexes: [[name, keyPath, opts]] } */
   const SCHEMA = {
@@ -26,6 +28,15 @@
     sets:      { keyPath: 'id', indexes: [['workoutId', 'workoutId'], ['exerciseId', 'exerciseId']] },
     metrics:   { keyPath: 'id', indexes: [['type', 'type'], ['date', 'date'], ['typeDate', ['type', 'date']]] },
     kv:        { keyPath: 'key', indexes: [] },
+
+    // --- v2 ---
+    sportSessions: { keyPath: 'id', indexes: [['date', 'date'], ['sport', 'sport']] },
+    sleepLogs:     { keyPath: 'id', indexes: [['date', 'date']] },
+    subjects:      { keyPath: 'id', indexes: [] },
+    studySessions: { keyPath: 'id', indexes: [['date', 'date'], ['subjectId', 'subjectId']] },
+    reviewItems:   { keyPath: 'id', indexes: [['subjectId', 'subjectId'], ['dueDate', 'dueDate']] },
+    cutPlans:      { keyPath: 'id', indexes: [] },
+    places:        { keyPath: 'id', indexes: [] },
   };
 
   let dbPromise = null;
@@ -142,7 +153,7 @@
     weightUnit: 'kg',      // 'kg' | 'lb'
     heightUnit: 'cm',      // 'cm' | 'in'
     energyUnit: 'kcal',
-    theme: 'auto',         // 'auto' | 'dark' | 'light'
+    theme: 'light',        // 'light' | 'dark' | 'auto' — light is the intended look
     firstDayOfWeek: 1,
     // Nutrition rules
     lateMealHour: 21,          // meals after this hour are "late"
@@ -151,6 +162,12 @@
     barWeightKg: 20,
     availablePlatesKg: [25, 20, 15, 10, 5, 2.5, 1.25],
     defaultRestSec: 120,
+
+    // Sleep & study
+    sleepTargetHours: 8,
+    wakeTarget: '07:00',
+    dailyStudyMinutes: 180,
+
     onboarded: false,
   };
 
@@ -327,5 +344,100 @@
     },
   };
 
-  V.store = { db, settings, foods, foodLog, exercises, workouts, sets, templates, metrics, open, SCHEMA };
+  // ---------------------------------------------------------------- sports --
+
+  const sports = {
+    all: () => db.all('sportSessions'),
+    byDate: (date) => db.byIndex('sportSessions', 'date', date),
+    save: (s) => db.put('sportSessions', s),
+    remove: (id) => db.remove('sportSessions', id),
+
+    async recent(limit) {
+      const all = await db.all('sportSessions');
+      return all.sort((a, b) => b.startedAt - a.startedAt).slice(0, limit || 30);
+    },
+  };
+
+  // ----------------------------------------------------------------- sleep --
+
+  const sleep = {
+    all: () => db.all('sleepLogs'),
+    save: (s) => db.put('sleepLogs', s),
+    remove: (id) => db.remove('sleepLogs', id),
+
+    /**
+     * A night is filed under the date you WOKE UP, which is what people mean by
+     * "how did I sleep last night" and keeps it aligned with that day's performance.
+     */
+    async byDate(date) {
+      const hits = await db.byIndex('sleepLogs', 'date', date);
+      return hits[0] || null;
+    },
+
+    async series() {
+      const all = await db.all('sleepLogs');
+      return all.sort((a, b) => (a.date < b.date ? -1 : 1));
+    },
+  };
+
+  // ----------------------------------------------------------------- study --
+
+  const study = {
+    subjects: () => db.all('subjects'),
+    saveSubject: (s) => db.put('subjects', s),
+
+    async removeSubject(id) {
+      // Cascade: orphaned sessions and review items would be unreachable otherwise.
+      for (const s of await db.byIndex('studySessions', 'subjectId', id)) await db.remove('studySessions', s.id);
+      for (const r of await db.byIndex('reviewItems', 'subjectId', id)) await db.remove('reviewItems', r.id);
+      return db.remove('subjects', id);
+    },
+
+    sessions: () => db.all('studySessions'),
+    sessionsByDate: (date) => db.byIndex('studySessions', 'date', date),
+    saveSession: (s) => db.put('studySessions', s),
+    removeSession: (id) => db.remove('studySessions', id),
+
+    reviews: () => db.all('reviewItems'),
+    saveReview: (r) => db.put('reviewItems', r),
+    removeReview: (id) => db.remove('reviewItems', id),
+
+    /** Review items due on or before `date`, soonest first. */
+    async dueReviews(date) {
+      const all = await db.all('reviewItems');
+      return all
+        .filter((r) => r.dueDate <= (date || V.today()))
+        .sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1));
+    },
+  };
+
+  // ------------------------------------------------------------- weight cut --
+
+  const cuts = {
+    all: () => db.all('cutPlans'),
+    get: (id) => db.get('cutPlans', id),
+    save: (p) => db.put('cutPlans', p),
+    remove: (id) => db.remove('cutPlans', id),
+
+    /** The single active plan, if any. */
+    async active() {
+      const all = await db.all('cutPlans');
+      return all.find((p) => p.active) || null;
+    },
+  };
+
+  // ---------------------------------------------------------------- places --
+
+  const places = {
+    all: () => db.all('places'),
+    get: (id) => db.get('places', id),
+    save: (p) => db.put('places', p),
+    remove: (id) => db.remove('places', id),
+  };
+
+  V.store = {
+    db, settings, foods, foodLog, exercises, workouts, sets, templates, metrics,
+    sports, sleep, study, cuts, places,
+    open, SCHEMA,
+  };
 })(window.V);

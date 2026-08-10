@@ -190,11 +190,11 @@
         `${V.fmt(totals.protein)}g of ${V.fmt(targets.protein)}g`);
     }
 
-    // -- Fibre (weight 15) -----------------------------------------------
+    // -- Fiber (weight 15) -----------------------------------------------
     // 14 g per 1000 kcal is the Institute of Medicine adequate-intake basis.
     if (totals.fiber != null && kcal > 0) {
       const target = Math.max(14 * (kcal / 1000), 12);
-      add('fiber', 'Fibre', 15, V.clamp(totals.fiber / target, 0, 1) * 100,
+      add('fiber', 'Fiber', 15, V.clamp(totals.fiber / target, 0, 1) * 100,
         `${V.fmt(totals.fiber)}g of ${V.fmt(target)}g`);
     }
 

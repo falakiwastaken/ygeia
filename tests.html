@@ -33,6 +33,11 @@
 
 <script src="js/util.js"></script>
 <script src="js/domain.js"></script>
+<script src="js/domain-life.js"></script>
+<script src="js/domain-cut.js"></script>
+<script src="js/domain-study.js"></script>
+<script src="js/domain-rank.js"></script>
+<script src="js/map.js"></script>
 <script>
 (function () {
   'use strict';
@@ -218,6 +223,136 @@
   t('kg <-> lb round-trips', V.displayToKg(V.kgToDisplay(83.7, 'lb'), 'lb'), 83.7);
   t('cm <-> in round-trips', V.displayToCm(V.cmToDisplay(178, 'in'), 'in'), 178);
   t('1 lb = 0.45359237 kg', V.displayToKg(1, 'lb'), 0.45359237, 1e-9);
+
+  // =====================================================================
+  group('BMI and FFMI');
+  // 80 kg at 1.80 m -> 80 / 3.24
+  t('BMI 80kg / 180cm', V.life.bmi(80, 180), 80 / 3.24);
+  t('BMI 24.7 is the healthy band', V.life.bmiCategory(24.7).label === 'Healthy range' ? 1 : 0, 1);
+  t('BMI 26 is overweight', V.life.bmiCategory(26).label === 'Overweight' ? 1 : 0, 1);
+  t('lean mass at 15% body fat', V.life.leanMass(80, 15), 68);
+  t('FFMI raw = lean / height^2', V.life.ffmi(80, 180, 15).raw, 68 / 3.24);
+  t('FFMI normalised is unchanged at 1.80 m', V.life.ffmi(80, 180, 15).normalised, 68 / 3.24);
+  t('FFMI normalisation lifts a shorter lifter',
+    V.life.ffmi(70, 165, 15).normalised > V.life.ffmi(70, 165, 15).raw ? 1 : 0, 1);
+  // A muscular lifter classed "overweight" must be told to use FFMI instead.
+  t('caveat fires for a lean, heavy lifter',
+    /muscle, not fat/.test(V.life.bmiCaveat(26, 12)) ? 1 : 0, 1);
+
+  // =====================================================================
+  group('Sport energy cost');
+  // kcal/min = MET x 3.5 x kg / 200
+  t('7 MET, 45 min, 75 kg', V.life.sportCalories(7, 45, 75, 'moderate'), (7 * 3.5 * 75 / 200) * 45);
+  t('"hard" applies a 1.25x factor',
+    V.life.sportCalories(7, 45, 75, 'hard'), (7 * 1.25 * 3.5 * 75 / 200) * 45);
+  t('zero duration costs nothing', V.life.sportCalories(7, 0, 75, 'moderate'), 0);
+  t('MET-minutes sum', V.life.metMinutes([{ met: 7, durationMin: 30 }, { met: 10, durationMin: 60 }]), 810);
+  t('below 500 MET-min misses the guideline',
+    V.life.loadBand(400).label === 'Below guideline' ? 1 : 0, 1);
+
+  // =====================================================================
+  group('Weight cut safety');
+  const wk = () => Date.now() + 7 * 86400000;
+  const modest = V.cut.plan({ currentKg: 80, targetKg: 78, weighInAt: wk(), sex: 'male' });
+  t('2 kg over a week is safe', modest.risk === 'safe' ? 1 : 0, 1);
+  t('safe plan produces a schedule', modest.phases.length > 0 ? 1 : 0, 1);
+
+  // 80 -> 66 kg in two days is 17.5% — far past where athletes have died.
+  const extreme = V.cut.plan({ currentKg: 80, targetKg: 66, weighInAt: Date.now() + 2 * 86400000, sex: 'male' });
+  t('extreme cut is classed unsafe', extreme.risk === 'unsafe' ? 1 : 0, 1);
+  t('unsafe cut generates NO schedule', extreme.phases.length, 0);
+  t('unsafe cut explains why', extreme.warnings.length >= 2 ? 1 : 0, 1);
+  t('unsafe cut is marked infeasible', extreme.feasible ? 1 : 0, 0);
+
+  t('already on weight needs no cut',
+    V.cut.plan({ currentKg: 70, targetKg: 70, weighInAt: wk(), sex: 'male' }).risk === 'none' ? 1 : 0, 1);
+  t('a past weigh-in is rejected',
+    V.cut.plan({ currentKg: 80, targetKg: 78, weighInAt: Date.now() - 86400000, sex: 'male' }).feasible ? 1 : 0, 0);
+
+  // Rehydration: 150% of the fluid deficit.
+  const rehy = V.cut.rehydration(2, 24, 78);
+  t('rehydrate 150% of loss', rehy.fluidL, 3);
+  t('24h turnaround allows full rehydration', rehy.complete ? 1 : 0, 1);
+  t('4h turnaround does not', V.cut.rehydration(2, 4, 78).complete ? 1 : 0, 0);
+  t('acute cap is 8% of bodyweight', V.cut.ACUTE_MAX_PCT, 0.08);
+
+  // =====================================================================
+  group('Sleep');
+  t('parse 07:30', V.study.parseTime('07:30'), 450);
+  t('reject 25:00', V.study.parseTime('25:00') === null ? 1 : 0, 1);
+  t('format 450 -> 07:30', V.study.formatTime(450) === '07:30' ? 1 : 0, 1);
+  t('formatting wraps past midnight', V.study.formatTime(-60) === '23:00' ? 1 : 0, 1);
+  t('23:00 to 07:00 is 8 hours', V.study.duration(V.study.parseTime('23:00'), V.study.parseTime('07:00')), 8);
+  t('01:00 to 09:00 is 8 hours', V.study.duration(60, 540), 8);
+  // 6 cycles = 9h, plus 15 min to fall asleep, back from 07:00 -> 21:45
+  t('6 cycles before a 07:00 wake = 21:45',
+    V.study.bedtimesFor(V.study.parseTime('07:00'))[0].bedtime === '21:45' ? 1 : 0, 1);
+  t('4 cycles is flagged as short',
+    V.study.bedtimesFor(420).find((b) => b.cycles === 4).adequate ? 1 : 0, 0);
+  t('sleep debt counts only shortfalls',
+    V.study.sleepDebt([{ date: V.today(), hours: 6 }, { date: V.addDays(V.today(), -1), hours: 10 }], 8), 2);
+
+  // =====================================================================
+  group('Spaced repetition');
+  const card = V.study.newReviewItem('s1', 'test');
+  t('new card starts in box 0', card.box, 0);
+  t('new card is due in 1 day', V.daysBetween(V.today(), card.dueDate), 1);
+  const passed = V.study.gradeReview(card, true);
+  t('recall promotes to box 1', passed.box, 1);
+  t('box 1 is due in 3 days', V.daysBetween(V.today(), passed.dueDate), 3);
+  const box3 = V.study.gradeReview(V.study.gradeReview(passed, true), true);
+  t('three passes reach box 3', box3.box, 3);
+  t('box 3 is due in 16 days', V.daysBetween(V.today(), box3.dueDate), 16);
+  t('forgetting resets to box 0', V.study.gradeReview(box3, false).box, 0);
+  t('a lapse is recorded', V.study.gradeReview(box3, false).lapses, 1);
+  t('only due cards are returned',
+    V.study.dueItems([{ dueDate: V.today() }, { dueDate: V.addDays(V.today(), 5) }]).length, 1);
+  t('re-reading is discounted vs recall',
+    V.study.effectiveMinutes([{ minutes: 60, technique: 'reading' }]) <
+    V.study.effectiveMinutes([{ minutes: 60, technique: 'recall' }]) ? 1 : 0, 1);
+
+  // =====================================================================
+  group('Strength rank');
+  // 80 kg male: squat standards are 0.75 / 1.25 / 1.75 / 2.5 / 3.0 x bodyweight,
+  // scoring 200 / 400 / 600 / 800 / 1000 at those exact thresholds.
+  t('0.75x bodyweight = 200 (beginner)', V.rank.liftScore('ex-back-squat', 60, 80, 'male'), 200);
+  t('1.25x = 400 (novice)', V.rank.liftScore('ex-back-squat', 100, 80, 'male'), 400);
+  t('1.75x = 600 (intermediate)', V.rank.liftScore('ex-back-squat', 140, 80, 'male'), 600);
+  t('2.5x = 800 (advanced)', V.rank.liftScore('ex-back-squat', 200, 80, 'male'), 800);
+  t('3.0x = 1000 (elite)', V.rank.liftScore('ex-back-squat', 240, 80, 'male'), 1000);
+  // 120 kg is 1.5x bodyweight — halfway between novice (1.25x = 400) and
+  // intermediate (1.75x = 600), so it interpolates to 500.
+  t('midpoint interpolates', V.rank.liftScore('ex-back-squat', 120, 80, 'male'), 500);
+  t('deadlift 2.0x = 600', V.rank.liftScore('ex-deadlift', 160, 80, 'male'), 600);
+  t('female standards scale by 0.72',
+    V.rank.liftScore('ex-back-squat', 140 * 0.72, 80, 'female'), 600);
+  t('unrated exercise returns null',
+    V.rank.liftScore('ex-lateral-raise', 20, 80, 'male') === null ? 1 : 0, 1);
+
+  t('one lift is capped by the breadth penalty', V.rank.overall([{ score: 800 }]), Math.round(800 * 0.82));
+  t('three lifts score in full', V.rank.overall([{ score: 800 }, { score: 800 }, { score: 800 }]), 800);
+  t('only the best three count',
+    V.rank.overall([{ score: 900 }, { score: 900 }, { score: 900 }, { score: 100 }]), 900);
+  t('no lifts means unranked', V.rank.overall([]) === null ? 1 : 0, 1);
+
+  t('rating 0 is Novice', V.rank.tierFor(0).name === 'Novice' ? 1 : 0, 1);
+  t('rating 600 is Adept', V.rank.tierFor(600).name === 'Adept' ? 1 : 0, 1);
+  t('rating 995 is Legend', V.rank.tierFor(995).name === 'Legend' ? 1 : 0, 1);
+  t('tiers ascend monotonically',
+    V.rank.TIERS.every((x, i, a) => i === 0 || x.min > a[i - 1].min) ? 1 : 0, 1);
+  t('progress reports points to next rank', V.rank.progress(200).pointsToNext, 180);
+  t('XP level rises with XP', V.rank.levelFor(5000).level > V.rank.levelFor(500).level ? 1 : 0, 1);
+  t('zero XP is level 1', V.rank.levelFor(0).level, 1);
+
+  // =====================================================================
+  group('Map projection');
+  // At zoom 0 the world is one 256px tile, so (0,0) lands dead centre.
+  t('origin at zoom 0 is x=128', V.map.project(0, 0, 0).x, 128);
+  t('origin at zoom 0 is y=128', V.map.project(0, 0, 0).y, 128);
+  t('project/unproject round-trips (lat)', V.map.unproject(V.map.project(51.5, -0.12, 15).x, V.map.project(51.5, -0.12, 15).y, 15).lat, 51.5, 0.0001);
+  t('project/unproject round-trips (lon)', V.map.unproject(V.map.project(51.5, -0.12, 15).x, V.map.project(51.5, -0.12, 15).y, 15).lon, -0.12, 0.0001);
+  t('London to Paris is ~344 km', V.map.distance(51.5074, -0.1278, 48.8566, 2.3522) / 1000, 344, 2);
+  t('a point is zero distance from itself', V.map.distance(51.5, -0.12, 51.5, -0.12), 0);
 
   // =====================================================================
   const summary = document.createElement('div');

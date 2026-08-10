@@ -1,10 +1,12 @@
 # Vitals
 
-A free, open-source, offline-first health tracker. Nutrition, strength training and body
-metrics in one app — a free alternative to closed-source trackers like Bevel.
+A free, open-source, offline-first lifestyle tracker. Nutrition, lifting, sport, sleep,
+study and body composition in one app — a free alternative to closed-source trackers.
 
 **Your data never leaves your device.** No account, no server, no analytics, no tracking.
 Everything is stored in your browser's local database.
+
+Soft parchment-and-sage theme by default, with a forest-night dark mode.
 
 <!-- Add a screenshot here once deployed: ![Vitals](docs/screenshot.png) -->
 
@@ -17,7 +19,7 @@ Everything is stored in your browser's local database.
 - Meal logging with named portions ("1 medium egg", "1 cup") instead of guessing grams
 - Calorie and macro targets calculated from your profile (Mifflin-St Jeor BMR → TDEE)
 - **A daily food-quality score** that grades the *day*, not individual foods: protein
-  adequacy, fibre, whole-food ratio, added sugar, saturated fat, sodium and meal timing
+  adequacy, fiber, whole-food ratio, added sugar, saturated fat, sodium and meal timing
 - Late-meal detection with a calorie floor, so water and supplements don't get flagged
 
 **Strength training**
@@ -29,11 +31,48 @@ Everything is stored in your browser's local database.
 - Estimated 1RM (blended Brzycki/Epley), automatic PR detection, progression charts
 - Double-progression suggestions: add reps first, then load
 
+**Strength rank**
+- A chess-style rating for lifting, scored against published bodyweight-relative strength
+  standards for your sex — so the number is absolute, not graded on a curve against others
+- Eight guild ranks from Novice to Legend; your best three rated lifts are averaged, with a
+  breadth penalty so one huge deadlift alone won't carry you
+- Training XP and levels for the sessions in between, because rank moves slowly and
+  showing up should still count
+
+**Sport**
+- 47 activities with MET values from the Compendium of Physical Activities
+- Energy cost and weekly training load in MET-minutes, against the WHO activity guideline
+- Explicitly **not** added to your calorie budget — see the note below
+
+**Sleep & study**
+- Sleep logging with duration, quality, sleep debt and a **consistency score** (regularity
+  predicts outcomes at least as strongly as total hours)
+- Bedtime planner built on 90-minute sleep cycles
+- Subjects with exam countdowns, focus-block timer, and study-time allocation weighted by
+  urgency and how far behind each subject is
+- **Spaced repetition** on Leitner boxes (1, 3, 7, 16, 35 days)
+- Honest guidance on the study/sleep trade-off: cutting sleep to study costs more recall
+  than the extra hour buys
+
+**Weight cutting (combat sports)**
+- Water-loading, sodium and carbohydrate manipulation on a day-by-day timeline
+- Splits the cut into gradual fat loss and acute loss, filling the acute portion from gut
+  content and glycogen water first and dehydration **last**
+- **Refuses to generate a schedule for a cut it considers unsafe** (>8% acute) and tells you
+  to move up a weight class instead
+- Rehydration plan, and a urine-colour hydration check
+
 **Body**
 - Weight, body fat, lean mass, resting HR, HRV, blood pressure, sleep, steps, VO₂ max
+- BMI — with a caveat that fires when it misclassifies a lean, muscular lifter — plus
+  **FFMI**, which actually responds to training
 - Trend lines with 30-day projections — and an **r² reliability check**, so a projection
   drawn through noise is labelled untrustworthy instead of shown with false confidence
 - Self-correcting calorie targets: if the scale disagrees with the prediction, the scale wins
+
+**Places**
+- Nearby restaurants, cafés, libraries, gyms and supermarkets from OpenStreetMap
+- A hand-rolled slippy map (no Leaflet), cuisine, opening hours and website links
 
 **Data**
 - Import your Apple Health export (see below)
@@ -98,31 +137,58 @@ Worth stating plainly, because other projects tend not to:
   on any iOS version.
 - **No barcode *scanning* on iOS.** Safari lacks the `BarcodeDetector` API, so barcodes are
   typed in rather than scanned. Lookup itself works fine.
+- **No restaurant menus.** There is no free API that returns them — Google Places and Yelp
+  both require paid keys and neither exposes structured dish data, and OpenStreetMap carries
+  a website link at best. Vitals shows what genuinely exists and lets you log what you ate;
+  it does not pretend to know the menu.
+- **Exercise calories are not added to your food budget.** Your target already includes your
+  activity level, so eating back workout calories double-counts them. That is the single most
+  common way calorie tracking silently fails, and this app deliberately won't do it.
+- **The strength rank is a motivator, not a verdict.** Strength standards are population
+  reference points; leverages, limb lengths and training history all move the real number.
 - **Not a medical device.** Nothing here diagnoses, treats or prevents anything. The
   biological formulas are population estimates that can be meaningfully wrong for any given
   individual. Talk to a doctor, not an app.
+
+### On weight cutting
+
+Acute weight cutting has killed athletes — dehydration has caused deaths in MMA and in
+collegiate wrestling. The safety limits in `js/domain-cut.js` are therefore part of the
+feature, not decoration: the planner refuses to produce a dehydration schedule above 8%
+acute loss and tells you to change weight class instead. If you relax a threshold in that
+file, you are changing a safety control. It is not medical advice and does not replace a
+coach or a doctor.
 
 ## Project layout
 
 ```
 index.html              app shell and script order
+tests.html              144 assertions — open it in a browser, no runner needed
 css/app.css             design system — every colour is a token
 js/util.js              DOM, date and unit helpers
 js/store.js             IndexedDB wrapper and repositories
-js/domain.js            all health maths — pure functions, no DOM, no I/O
+js/domain.js            nutrition, strength, energy balance, trends
+js/domain-life.js       BMI, FFMI, sport METs
+js/domain-cut.js        weight cutting — including its safety limits
+js/domain-study.js      sleep cycles, spaced repetition, study allocation
+js/domain-rank.js       strength rating, guild ranks, training XP
 js/data-foods.js        bundled offline food library
 js/data-exercises.js    bundled exercise library
 js/ui.js                reusable UI pieces (sheets, rings, rows, inputs)
 js/charts.js            hand-rolled SVG line/bar/sparkline charts
+js/map.js               minimal slippy map over OpenStreetMap tiles
 js/openfoodfacts.js     food database client
+js/places.js            Overpass nearby-places search and UI
 js/healthimport.js      streaming Apple Health export parser
-js/view-*.js            one file per tab
+js/view-*.js            one file per tab, plus the weight-cut screens
 js/app.js               bootstrap, routing, first-run seeding
 sw.js                   service worker for offline caching
 ```
 
-`js/domain.js` deliberately contains no DOM or storage access, so every calculation in the
-app can be tested in isolation and reused if the UI is ever rewritten.
+Every `js/domain-*.js` file deliberately contains no DOM or storage access, so each
+calculation can be tested in isolation and reused if the UI is ever rewritten. That is what
+`tests.html` exercises — reference values are worked out by hand from the published formulas
+rather than read back from the implementation.
 
 ## Why no framework?
 

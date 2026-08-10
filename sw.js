@@ -8,7 +8,8 @@
  * Your health data is NOT here — it lives in IndexedDB and is never cached or transmitted.
  */
 
-const CACHE = 'vitals-v1';
+// Bump this to ship an update — the old cache is dropped on activate.
+const CACHE = 'vitals-v2';
 
 const SHELL = [
   './',
@@ -18,16 +19,24 @@ const SHELL = [
   './js/util.js',
   './js/store.js',
   './js/domain.js',
+  './js/domain-life.js',
+  './js/domain-cut.js',
+  './js/domain-study.js',
+  './js/domain-rank.js',
   './js/data-foods.js',
   './js/data-exercises.js',
   './js/ui.js',
   './js/charts.js',
+  './js/map.js',
   './js/openfoodfacts.js',
+  './js/places.js',
   './js/healthimport.js',
   './js/view-today.js',
   './js/view-food.js',
   './js/view-train.js',
+  './js/view-study.js',
   './js/view-body.js',
+  './js/view-cut.js',
   './js/view-settings.js',
   './js/app.js',
   './icons/icon.svg',

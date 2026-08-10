@@ -1,15 +1,15 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <title>Vitals</title>
-<meta name="description" content="Free, open-source, offline-first health tracker. Your data never leaves your device.">
-<meta name="theme-color" content="#0B0D10">
+<meta name="description" content="Free, open-source, offline-first lifestyle tracker. Nutrition, lifting, sport, sleep and study. Your data never leaves your device.">
+<meta name="theme-color" content="#F6F2E8">
 
-<!-- iOS home-screen install: makes it launch fullscreen with no Safari chrome -->
+<!-- iOS home-screen install: launches fullscreen with no Safari chrome -->
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Vitals">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="manifest" href="manifest.webmanifest">
@@ -20,7 +20,6 @@
 <body>
 
 <div id="app">
-  <!-- Header -->
   <header class="app-header">
     <div class="header-row">
       <button class="icon-btn" id="btn-prev-day" aria-label="Previous day">‹</button>
@@ -32,16 +31,15 @@
     </div>
   </header>
 
-  <!-- Views are plain sections; the router toggles .active -->
   <main id="views">
     <section class="view active" id="view-today"></section>
     <section class="view" id="view-food"></section>
     <section class="view" id="view-train"></section>
+    <section class="view" id="view-study"></section>
     <section class="view" id="view-body"></section>
     <section class="view" id="view-settings"></section>
   </main>
 
-  <!-- Bottom tab bar -->
   <nav class="tabbar" id="tabbar">
     <button class="tab active" data-view="today">
       <svg viewBox="0 0 24 24" class="tab-icon"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg>
@@ -55,6 +53,10 @@
       <svg viewBox="0 0 24 24" class="tab-icon"><path d="M4 9v6M20 9v6M7 6v12M17 6v12M7 12h10"/></svg>
       <span>Train</span>
     </button>
+    <button class="tab" data-view="study">
+      <svg viewBox="0 0 24 24" class="tab-icon"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5a1.5 1.5 0 0 0 1.5-1.5z"/></svg>
+      <span>Study</span>
+    </button>
     <button class="tab" data-view="body">
       <svg viewBox="0 0 24 24" class="tab-icon"><path d="M3 12h4l2-6 3 13 3-9 2 2h4"/></svg>
       <span>Body</span>
@@ -65,7 +67,6 @@
     </button>
   </nav>
 
-  <!-- Sheet / modal host -->
   <div class="sheet-backdrop" id="sheet-backdrop" hidden>
     <div class="sheet" id="sheet" role="dialog" aria-modal="true">
       <div class="sheet-grabber"></div>
@@ -84,21 +85,29 @@
   Classic scripts, loaded in dependency order and sharing the window.V namespace.
 
   Deliberately NOT ES modules: <script type="module"> is blocked by CORS on file:// URLs,
-  and this app must run by double-clicking index.html with no server and no build step.
+  and this app must run by opening index.html with no server and no build step.
 -->
 <script src="js/util.js"></script>
 <script src="js/store.js"></script>
 <script src="js/domain.js"></script>
+<script src="js/domain-life.js"></script>
+<script src="js/domain-cut.js"></script>
+<script src="js/domain-study.js"></script>
+<script src="js/domain-rank.js"></script>
 <script src="js/data-foods.js"></script>
 <script src="js/data-exercises.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/charts.js"></script>
+<script src="js/map.js"></script>
 <script src="js/openfoodfacts.js"></script>
+<script src="js/places.js"></script>
 <script src="js/healthimport.js"></script>
 <script src="js/view-today.js"></script>
 <script src="js/view-food.js"></script>
 <script src="js/view-train.js"></script>
+<script src="js/view-study.js"></script>
 <script src="js/view-body.js"></script>
+<script src="js/view-cut.js"></script>
 <script src="js/view-settings.js"></script>
 <script src="js/app.js"></script>
 </body>
