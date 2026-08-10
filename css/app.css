@@ -408,6 +408,60 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--info); outl
   font-size: 13px; color: var(--text-dim); line-height: 1.5;
 }
 
+/* ----------------------------------------------------------- flashcards -- */
+
+.fc-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-md);
+  min-height: 150px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: var(--sp-2);
+  padding: var(--sp-5) var(--sp-4);
+  margin-bottom: var(--sp-4);
+  cursor: pointer;
+  text-align: center;
+  animation: fc-in .2s ease;
+}
+@keyframes fc-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+.fc-face {
+  font-family: var(--font-display);
+  font-size: 21px; line-height: 1.35; color: var(--text);
+}
+.fc-front-small {
+  font-size: 13px; color: var(--text-faint);
+  padding-bottom: var(--sp-2); border-bottom: 1px solid var(--border);
+  width: 100%;
+}
+
+.fc-option {
+  margin-bottom: var(--sp-2);
+  text-align: left; justify-content: flex-start;
+  white-space: normal; line-height: 1.35;
+}
+.fc-right { background: var(--good); border-color: var(--good); color: var(--on-accent); }
+.fc-wrong { background: var(--bad); border-color: var(--bad); color: var(--on-accent); }
+
+.fc-match {
+  display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2);
+  margin-bottom: var(--sp-4);
+}
+.fc-tile {
+  min-height: 78px; padding: var(--sp-2);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--text);
+  font-size: 13px; line-height: 1.3; cursor: pointer;
+  display: grid; place-items: center; text-align: center;
+  box-shadow: var(--shadow-sm);
+  transition: transform .1s ease, opacity .25s ease, background .15s ease;
+}
+.fc-tile.sel { background: var(--info); border-color: var(--info); color: var(--on-accent); transform: scale(.97); }
+.fc-tile.bad { background: var(--bad); border-color: var(--bad); color: var(--on-accent); }
+.fc-tile.gone { opacity: 0; pointer-events: none; transform: scale(.9); }
+
 /* ---------------------------------------------------------- lock screen -- */
 
 #lock-screen {

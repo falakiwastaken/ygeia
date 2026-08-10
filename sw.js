@@ -41,6 +41,7 @@ const SHELL = [
   './js/view-food.js',
   './js/view-train.js',
   './js/view-study.js',
+  './js/view-flashcards.js',
   './js/view-body.js',
   './js/view-cut.js',
   './js/view-plan.js',

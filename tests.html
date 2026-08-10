@@ -500,6 +500,86 @@
   t('only curated questions are tested', V.insights.QUESTIONS.length < 20 ? 1 : 0, 1);
 
   // =====================================================================
+  group('Flashcards — card shape');
+  const c1 = V.study.newCard({ front: 'photosynthesis', back: 'light into chemical energy' });
+  t('front is stored', c1.front === 'photosynthesis' ? 1 : 0, 1);
+  t('back is stored', c1.back === 'light into chemical energy' ? 1 : 0, 1);
+  t('title mirrors front for old backups', c1.title === c1.front ? 1 : 0, 1);
+  t('a two-sided card needs no answer', c1.needsAnswer ? 1 : 0, 0);
+  t('a one-sided card is flagged', V.study.newCard({ front: 'x' }).needsAnswer ? 1 : 0, 1);
+  t('new cards start in box 0', c1.box, 0);
+  t('new cards are due tomorrow', V.daysBetween(V.today(), c1.dueDate), 1);
+  t('whitespace is trimmed', V.study.newCard({ front: '  a  ', back: '  b  ' }).front === 'a' ? 1 : 0, 1);
+  t('legacy newReviewItem still works', V.study.newReviewItem('s1', 'term').front === 'term' ? 1 : 0, 1);
+
+  // =====================================================================
+  group('Flashcards — answer checking');
+  const norm = V.study.normaliseAnswer;
+  t('case is ignored', norm('Mitochondrion') === norm('mitochondrion') ? 1 : 0, 1);
+  t('punctuation is ignored', norm('cell, wall.') === norm('cell wall') ? 1 : 0, 1);
+  t('articles are ignored', norm('the nucleus') === norm('nucleus') ? 1 : 0, 1);
+  t('accents are folded', norm('résumé') === norm('resume') ? 1 : 0, 1);
+  t('extra whitespace collapses', norm('  a   b  ') === 'a b' ? 1 : 0, 1);
+
+  const ck = V.study.checkAnswer;
+  t('exact answer is correct', ck('nucleus', 'nucleus').correct ? 1 : 0, 1);
+  t('different case is correct', ck('NUCLEUS', 'nucleus').correct ? 1 : 0, 1);
+  t('with an article is correct', ck('the nucleus', 'nucleus').correct ? 1 : 0, 1);
+  t('a genuine miss is wrong', ck('ribosome', 'nucleus').correct ? 1 : 0, 0);
+  t('a genuine miss is not a near miss', ck('ribosome', 'nucleus').nearMiss ? 1 : 0, 0);
+  // One transposed letter in a 12-character answer should not reset the card to box 0.
+  t('a single typo is a near miss', ck('mitochondrin', 'mitochondrion').nearMiss ? 1 : 0, 1);
+  t('a near miss is not counted correct', ck('mitochondrin', 'mitochondrion').correct ? 1 : 0, 0);
+  // Short answers get no tolerance — one letter is proportionally a huge error.
+  t('short answers tolerate nothing', ck('cat', 'bat').nearMiss ? 1 : 0, 0);
+  t('empty input is flagged', ck('', 'nucleus').empty ? 1 : 0, 1);
+  t('slash alternatives are accepted', ck('renal organ', 'kidney / renal organ').correct ? 1 : 0, 1);
+  t('edit distance is symmetric',
+    V.study.editDistance('abc', 'abd') === V.study.editDistance('abd', 'abc') ? 1 : 0, 1);
+  t('edit distance of identical strings is 0', V.study.editDistance('abc', 'abc'), 0);
+
+  // =====================================================================
+  group('Flashcards — quiz construction');
+  const deck = [
+    V.study.newCard({ front: 'a', back: 'alpha' }),
+    V.study.newCard({ front: 'b', back: 'beta' }),
+    V.study.newCard({ front: 'c', back: 'gamma' }),
+    V.study.newCard({ front: 'd', back: 'delta' }),
+  ];
+  const distr = V.study.distractors(deck[0], deck, 3);
+  t('returns the requested number', distr.length, 3);
+  t('never includes the correct answer',
+    distr.some((d) => V.study.normaliseAnswer(d) === V.study.normaliseAnswer(deck[0].back)) ? 1 : 0, 0);
+  t('distractors are unique', new Set(distr).size, distr.length);
+  // A deck with duplicate backs must not offer the same wrong answer twice.
+  const dupDeck = deck.concat([V.study.newCard({ front: 'e', back: 'beta' })]);
+  t('duplicate backs are deduplicated',
+    new Set(V.study.distractors(dupDeck[0], dupDeck, 3)).size,
+    V.study.distractors(dupDeck[0], dupDeck, 3).length);
+  t('cannot build choice from too few cards',
+    V.study.canMultipleChoice(deck.slice(0, 2)) ? 1 : 0, 0);
+  t('can build choice from four cards', V.study.canMultipleChoice(deck) ? 1 : 0, 1);
+
+  const src = [1, 2, 3, 4, 5];
+  const shuffled = V.study.shuffle(src);
+  t('shuffle keeps every element', shuffled.slice().sort().join(), src.join());
+  t('shuffle does not mutate the input', src.join(), '1,2,3,4,5');
+
+  // =====================================================================
+  group('Flashcards — bulk import');
+  const dash = V.study.parseBulk('photosynthesis - light to energy\nmitosis - cell division');
+  t('dash separator parses two rows', dash.rows.length, 2);
+  t('front is captured', dash.rows[0].front === 'photosynthesis' ? 1 : 0, 1);
+  t('back is captured', dash.rows[0].back === 'light to energy' ? 1 : 0, 1);
+  t('tab separator works', V.study.parseBulk('a\tb').rows.length, 1);
+  t('colon separator works', V.study.parseBulk('a: b').rows.length, 1);
+  t('blank lines are ignored', V.study.parseBulk('a - b\n\n\nc - d').rows.length, 2);
+  t('unsplittable lines are reported', V.study.parseBulk('just one side').skipped.length, 1);
+  t('unsplittable lines are not imported', V.study.parseBulk('just one side').rows.length, 0);
+  t('export round-trips',
+    V.study.parseBulk(V.study.toBulkText([{ front: 'x', back: 'y' }])).rows[0].back === 'y' ? 1 : 0, 1);
+
+  // =====================================================================
   group('Program sessions');
   const exMap = {};
   for (const e of V.seedExercises()) exMap[e.id] = e;

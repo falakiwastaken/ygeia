@@ -424,13 +424,38 @@
         }),
       );
 
-      // ---- Reviews due ------------------------------------------------------
+      // ---- Flashcards --------------------------------------------------------
       const due = V.study.dueItems(reviews);
+      const decks = await V.store.study.decks();
+      const unfinished = reviews.filter((c) => !c.back).length;
+
       root.appendChild(
         V.ui.card({
-          title: 'Review',
-          sub: due.length ? `${due.length} card(s) due` : 'Nothing due',
-          children: [V.ui.button(due.length ? `Review ${due.length} card(s)` : 'Add cards', openReviewSheet, due.length ? 'btn-good' : 'btn-ghost')],
+          title: 'Flashcards',
+          sub: [
+            decks.length ? `${decks.length} deck(s)` : 'No decks yet',
+            reviews.length ? `${reviews.length} card(s)` : null,
+            due.length ? `${due.length} due` : null,
+          ].filter(Boolean).join(' · '),
+          action: due.length
+            ? V.el('div', { className: 'stat-value', style: { color: 'var(--good)' }, text: String(due.length) })
+            : null,
+          children: [
+            unfinished
+              ? V.el('div', {
+                  className: 'hint',
+                  text: `${unfinished} card(s) still need an answer on the back.`,
+                })
+              : null,
+            V.el('div', { style: { height: '10px' } }),
+            V.ui.button(
+              due.length ? `Review ${due.length} due card(s)` : 'Open decks',
+              () => V.flashcards.openDecks(),
+              due.length ? 'btn-good' : 'btn-primary',
+            ),
+            V.el('div', { style: { height: '8px' } }),
+            V.ui.button('Quick review (all subjects)', openReviewSheet, 'btn-ghost'),
+          ],
         }),
       );
 

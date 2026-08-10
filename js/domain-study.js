@@ -158,17 +158,35 @@
    */
   S.LEITNER_INTERVALS = [1, 3, 7, 16, 35];
 
-  S.newReviewItem = function (subjectId, title) {
+  /**
+   * Create a two-sided card.
+   *
+   * `title` is still written alongside `front` because cards created before v4 had only a
+   * title, and older backups restore into this shape. Keeping both means an old export can
+   * be re-imported without special-casing.
+   */
+  S.newCard = function (o) {
+    const front = (o.front || '').trim();
+    const back = (o.back || '').trim();
     return {
       id: V.uid(),
-      subjectId,
-      title,
+      subjectId: o.subjectId || null,
+      deckId: o.deckId || null,
+      front,
+      back,
+      title: front,
+      needsAnswer: !back,
       box: 0,
       createdAt: Date.now(),
       dueDate: V.addDays(V.today(), S.LEITNER_INTERVALS[0]),
       reviews: 0,
       lapses: 0,
     };
+  };
+
+  /** Retained for older call sites: a one-sided card is just a card with no back yet. */
+  S.newReviewItem = function (subjectId, title) {
+    return S.newCard({ subjectId, front: title });
   };
 
   /**
@@ -200,6 +218,160 @@
     return items
       .filter((i) => i.dueDate <= today)
       .sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1));
+  };
+
+  // =========================================================================
+  // Answer checking
+  // =========================================================================
+
+  /**
+   * Reduce an answer to what actually matters.
+   *
+   * Marking someone wrong for a capital letter, a trailing full stop or writing "the
+   * mitochondrion" instead of "mitochondrion" teaches nothing and just breeds resentment
+   * at the app. Accents are folded too, so "resume" matches "résumé".
+   */
+  S.normaliseAnswer = function (s) {
+    return String(s == null ? '' : s)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')  // strip combining diacritics
+      .toLowerCase()
+      .replace(/[^\w\s]/g, ' ')             // punctuation to space
+      .replace(/\b(a|an|the)\b/g, ' ')      // leading articles carry no meaning here
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
+  /** Levenshtein distance, iterative with a single row. */
+  function editDistance(a, b) {
+    if (a === b) return 0;
+    if (!a.length) return b.length;
+    if (!b.length) return a.length;
+
+    let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+    for (let i = 1; i <= a.length; i++) {
+      const row = [i];
+      for (let j = 1; j <= b.length; j++) {
+        row[j] = Math.min(
+          prev[j] + 1,
+          row[j - 1] + 1,
+          prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
+        );
+      }
+      prev = row;
+    }
+    return prev[b.length];
+  }
+
+  S.editDistance = editDistance;
+
+  /**
+   * Grade a typed answer.
+   *
+   * Returns `nearMiss` for a small number of typos, scaled to answer length — one slip in
+   * a short word is proportionally a much bigger error than one in a long phrase. The UI
+   * shows near misses as "you typed X, the answer was Y" and lets the learner decide,
+   * rather than silently accepting or rejecting.
+   */
+  S.checkAnswer = function (typed, correct) {
+    const a = S.normaliseAnswer(typed);
+    const b = S.normaliseAnswer(correct);
+
+    if (!a) return { correct: false, nearMiss: false, empty: true };
+    if (a === b) return { correct: true, nearMiss: false };
+
+    // Multiple acceptable answers can be written "x / y" or "x; y" on the back.
+    const alternatives = String(correct || '').split(/[/;]|,\s(?=\w)/).map(S.normaliseAnswer).filter(Boolean);
+    if (alternatives.length > 1 && alternatives.includes(a)) return { correct: true, nearMiss: false };
+
+    const tolerance = b.length <= 4 ? 0 : b.length <= 8 ? 1 : 2;
+    const distance = editDistance(a, b);
+
+    return { correct: false, nearMiss: distance > 0 && distance <= tolerance, distance };
+  };
+
+  // =========================================================================
+  // Quiz construction
+  // =========================================================================
+
+  /** Fisher-Yates. Returns a new array; the input is not mutated. */
+  S.shuffle = function (arr) {
+    const out = arr.slice();
+    for (let i = out.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [out[i], out[j]] = [out[j], out[i]];
+    }
+    return out;
+  };
+
+  /**
+   * Wrong answers for a multiple-choice question, drawn from other cards in the same deck
+   * so they are plausible rather than absurd.
+   *
+   * Deduplicated by normalised text, and the correct answer can never appear as a
+   * distractor even if another card happens to share it.
+   */
+  S.distractors = function (card, pool, count) {
+    const want = count == null ? 3 : count;
+    const correct = S.normaliseAnswer(card.back);
+    const seen = new Set([correct]);
+    const options = [];
+
+    for (const other of S.shuffle(pool)) {
+      if (other.id === card.id || !other.back) continue;
+      const key = S.normaliseAnswer(other.back);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      options.push(other.back);
+      if (options.length >= want) break;
+    }
+    return options;
+  };
+
+  /** True when a deck can support multiple choice at all. */
+  S.canMultipleChoice = function (cards) {
+    const distinct = new Set(cards.filter((c) => c.back).map((c) => S.normaliseAnswer(c.back)));
+    return distinct.size >= 3;
+  };
+
+  // =========================================================================
+  // Bulk import
+  // =========================================================================
+
+  /**
+   * Parse pasted text into cards. Tries the given separator, then falls back to tab and
+   * common dashes, so material copied out of a table or a revision guide mostly just works.
+   */
+  S.parseBulk = function (text, separator) {
+    const seps = [separator, '\t', ' - ', ' — ', ' – ', ':', ','].filter(Boolean);
+    const rows = [];
+    const skipped = [];
+
+    for (const rawLine of String(text || '').split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line) continue;
+
+      let split = null;
+      for (const sep of seps) {
+        const idx = line.indexOf(sep);
+        // Require something on both sides, or it is not really a pair.
+        if (idx > 0 && idx < line.length - sep.length) {
+          split = [line.slice(0, idx).trim(), line.slice(idx + sep.length).trim()];
+          break;
+        }
+      }
+
+      if (split && split[0] && split[1]) rows.push({ front: split[0], back: split[1] });
+      else skipped.push(line);
+    }
+
+    return { rows, skipped };
+  };
+
+  /** Serialise a deck back to pasteable text. */
+  S.toBulkText = function (cards, separator) {
+    const sep = separator || ' - ';
+    return cards.map((c) => `${c.front}${sep}${c.back}`).join('\n');
   };
 
   // =========================================================================

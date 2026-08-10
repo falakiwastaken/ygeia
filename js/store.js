@@ -17,8 +17,8 @@
   const DB_NAME = 'ygeia';
   // v2 added lifestyle tracking: sports, sleep, study, weight cuts and saved places.
   // v3 added check-ins, accountability habits, meal plans and training programs.
-  // Upgrades only ever create new stores, so existing data survives untouched.
-  const DB_VERSION = 3;
+  // v4 added decks and migrated review items from one-sided to front/back cards.
+  const DB_VERSION = 4;
 
   /** store name -> { keyPath, indexes: [[name, keyPath, opts]] } */
   const SCHEMA = {
@@ -48,6 +48,9 @@
     habitLogs:  { keyPath: 'id', indexes: [['date', 'date'], ['habitId', 'habitId']] },
     mealPlans:  { keyPath: 'id', indexes: [['date', 'date']] },
     programRun: { keyPath: 'id', indexes: [] },
+
+    // --- v4 ---
+    decks: { keyPath: 'id', indexes: [['subjectId', 'subjectId']] },
   };
 
   let dbPromise = null;
@@ -68,7 +71,27 @@
             if (!st.indexNames.contains(idxName)) st.createIndex(idxName, keyPath, opts || {});
           }
         }
-        void e;
+
+        // ---- v4: review items became two-sided flashcards --------------------
+        // Before v4 a card was just a title you self-graded. Copy that into `front`
+        // and flag it so the UI can prompt for the missing answer. Runs inside the
+        // versionchange transaction, so it either completes or the upgrade aborts —
+        // no half-migrated state, and no card is lost.
+        if (e.oldVersion < 4 && db.objectStoreNames.contains('reviewItems')) {
+          const st = req.transaction.objectStore('reviewItems');
+          st.openCursor().onsuccess = (ev) => {
+            const cursor = ev.target.result;
+            if (!cursor) return;
+            const item = cursor.value;
+            if (item.front == null) {
+              item.front = item.title || '';
+              item.back = item.back || '';
+              item.needsAnswer = !item.back;
+              cursor.update(item);
+            }
+            cursor.continue();
+          };
+        }
       };
 
       req.onsuccess = () => resolve(req.result);
@@ -422,6 +445,33 @@
       return all
         .filter((r) => r.dueDate <= (date || V.today()))
         .sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1));
+    },
+
+    // ---- decks -------------------------------------------------------------
+
+    decks: () => db.all('decks'),
+    getDeck: (id) => db.get('decks', id),
+    saveDeck: (d) => db.put('decks', d),
+
+    async removeDeck(id, keepCards) {
+      const cards = await db.all('reviewItems');
+      for (const c of cards.filter((x) => x.deckId === id)) {
+        // Deleting a deck should not silently destroy study history unless asked.
+        if (keepCards) { delete c.deckId; await db.put('reviewItems', c); }
+        else await db.remove('reviewItems', c.id);
+      }
+      return db.remove('decks', id);
+    },
+
+    async cardsInDeck(deckId) {
+      const all = await db.all('reviewItems');
+      return all.filter((c) => c.deckId === deckId);
+    },
+
+    /** Cards with a front but no back yet — surfaced so migrated cards get finished. */
+    async unfinishedCards() {
+      const all = await db.all('reviewItems');
+      return all.filter((c) => c.needsAnswer || !c.back);
     },
   };
 
