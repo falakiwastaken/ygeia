@@ -349,6 +349,15 @@
         }),
       );
 
+      // ---- Photo problem help ------------------------------------------------
+      root.appendChild(
+        V.ui.card({
+          title: 'Stuck on a problem?',
+          sub: 'Photograph it and get it worked through step by step',
+          children: [V.ui.button('Take a photo', () => V.solveView.openSolveSheet(), 'btn-ghost')],
+        }),
+      );
+
       // ---- Subjects ---------------------------------------------------------
       root.appendChild(V.ui.sectionTitle('Subjects'));
 

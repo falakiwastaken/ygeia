@@ -507,6 +507,19 @@
         );
       }
 
+      // ---- Study photo help ---------------------------------------------------
+      root.appendChild(V.ui.sectionTitle('Study photo help'));
+      root.appendChild(V.ui.list(await V.solveView.buildSettingsRows()));
+      root.appendChild(
+        V.el('div', {
+          className: 'hint',
+          text: 'This is the only feature that sends anything off your device, and only ever ' +
+                'the photo you take plus your note — never your health data, which is enforced ' +
+                'in code. Google\'s free tier may use submitted images for training and human ' +
+                'reviewers can see them, so photograph the question and nothing else.',
+        }),
+      );
+
       // ---- How it's calculated ----------------------------------------------
       root.appendChild(V.ui.sectionTitle('How it’s calculated'));
       root.appendChild(

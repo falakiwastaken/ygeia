@@ -445,6 +445,20 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--info); outl
 .fc-right { background: var(--good); border-color: var(--good); color: var(--on-accent); }
 .fc-wrong { background: var(--bad); border-color: var(--bad); color: var(--on-accent); }
 
+/* Photo problem help */
+.solve-preview {
+  width: 100%; max-height: 320px; object-fit: contain;
+  border-radius: var(--r-md); border: 1px solid var(--border);
+  background: var(--surface-2); margin-top: var(--sp-3); display: block;
+}
+.solve-answer {
+  white-space: pre-wrap;
+  font-size: 14px; line-height: 1.65;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-md); padding: var(--sp-4); margin-top: var(--sp-3);
+  box-shadow: var(--shadow-sm);
+}
+
 /* Card builder rows — the Quizlet-style list editor */
 .fc-row {
   background: var(--surface);
