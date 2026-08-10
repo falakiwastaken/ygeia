@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vitals — domain tests</title>
+<style>
+  body { font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+         background:#0B0D10; color:#E8EDF2; margin:0; padding:24px; }
+  h1 { font-size:18px; margin:0 0 4px; }
+  .sub { color:#8A94A3; margin-bottom:20px; font-size:13px; }
+  .summary { padding:12px 16px; border-radius:10px; margin-bottom:18px; font-weight:700; }
+  .ok  { background:#0F2E24; color:#22D3A6; border:1px solid #22D3A6; }
+  .bad { background:#33131C; color:#FF5C7A; border:1px solid #FF5C7A; }
+  .group { color:#4DA3FF; margin:18px 0 6px; font-weight:700; }
+  .case { padding:3px 0; border-bottom:1px solid #1C222A; display:flex; gap:10px; }
+  .tag { flex:0 0 46px; font-weight:700; }
+  .pass .tag { color:#22D3A6; }
+  .fail .tag { color:#FF5C7A; }
+  .fail { background:#2A1219; }
+  .name { flex:1; }
+  .nums { color:#67707C; }
+</style>
+</head>
+<body>
+<h1>Vitals — domain tests</h1>
+<div class="sub">
+  Pure-function tests for <code>js/domain.js</code>. No test runner, no dependencies —
+  open this file in a browser. Reference values are computed by hand from the published
+  formulas, not from the implementation.
+</div>
+<div id="out"></div>
+
+<script src="js/util.js"></script>
+<script src="js/domain.js"></script>
+<script>
+(function () {
+  'use strict';
+  const D = V.domain;
+  const out = document.getElementById('out');
+  let pass = 0, fail = 0;
+
+  const near = (a, b, tol) => Math.abs(a - b) <= (tol == null ? 0.01 : tol);
+
+  function group(name) {
+    out.appendChild(Object.assign(document.createElement('div'), { className: 'group', textContent: name }));
+  }
+
+  function t(name, got, want, tol) {
+    const ok = near(Number(got), Number(want), tol);
+    ok ? pass++ : fail++;
+    const row = document.createElement('div');
+    row.className = 'case ' + (ok ? 'pass' : 'fail');
+    row.innerHTML =
+      '<span class="tag">' + (ok ? 'PASS' : 'FAIL') + '</span>' +
+      '<span class="name">' + name + '</span>' +
+      '<span class="nums">' + (+Number(got).toFixed(4)) + ' / ' + (+Number(want).toFixed(4)) + '</span>';
+    out.appendChild(row);
+  }
+
+  // =====================================================================
+  group('Mifflin-St Jeor BMR / TDEE');
+  // Worked by hand: 10*80 + 6.25*180 - 5*30 + 5 = 800 + 1125 - 150 + 5
+  t('BMR male 80kg 180cm 30y = 1780', D.bmr({ sex: 'male', weightKg: 80, heightCm: 180, age: 30 }), 1780);
+  t('BMR female same stats = 1614', D.bmr({ sex: 'female', weightKg: 80, heightCm: 180, age: 30 }), 1614);
+  t('BMR unspecified = midpoint 1697', D.bmr({ sex: 'unspecified', weightKg: 80, heightCm: 180, age: 30 }), 1697);
+  t('TDEE moderate = BMR x 1.55',
+    D.tdee({ sex: 'male', weightKg: 80, heightCm: 180, age: 30, activityLevel: 'moderate' }), 1780 * 1.55);
+
+  const lean = { sex: 'female', weightKg: 50, heightCm: 160, age: 25, activityLevel: 'sedentary', goal: 'cut' };
+  t('cut target never dips below BMR', D.calorieTarget(lean) >= D.bmr(lean) ? 1 : 0, 1);
+
+  // =====================================================================
+  group('Macro targets');
+  const prof = { sex: 'male', weightKg: 80, heightCm: 180, age: 30, activityLevel: 'moderate', goal: 'maintain', proteinPerKg: 1.8 };
+  const tg = D.macroTargets(prof);
+  t('protein = 1.8 g/kg x 80kg', tg.protein, 144);
+  t('macros reconstruct calorie target', tg.protein * 4 + tg.carbs * 4 + tg.fat * 9, tg.kcal, 5);
+  t('4/4/9 kcal per gram', D.kcalFromMacros({ protein: 50, carbs: 100, fat: 20 }), 50 * 4 + 100 * 4 + 20 * 9);
+  t('fat floored at 0.6 g/kg',
+    D.macroTargets({ sex: 'male', weightKg: 100, heightCm: 180, age: 30, activityLevel: 'sedentary', goal: 'cut', proteinPerKg: 2.2 }).fat >= 60 ? 1 : 0, 1);
+
+  // =====================================================================
+  group('Energy balance (7700 kcal/kg)');
+  // cut @80kg targets -0.6 kg/wk. Losing 1.0 => 0.4 too fast => +440/day, capped to +300.
+  t('losing too fast -> capped +300', D.suggestCalorieAdjustment('cut', -1.0, 80), 300);
+  t('within deadband -> no change', D.suggestCalorieAdjustment('cut', -0.65, 80), 0);
+  t('maintaining but gaining -> -225', D.suggestCalorieAdjustment('maintain', 0.2, 80), -225);
+  t('direction: too slow -> eat less', D.suggestCalorieAdjustment('cut', -0.2, 80) < 0 ? 1 : 0, 1);
+
+  // =====================================================================
+  group('One-rep max');
+  t('1 rep returns the weight itself', D.estimate1RM(100, 1), 100);
+  // Brzycki 100*36/32 = 112.5; Epley 100*(1+5/30) = 116.667; blend weight (5-2)/20 = 0.15
+  t('100kg x5 blended = 113.125', D.estimate1RM(100, 5), 112.5 * 0.85 + (100 * (1 + 5 / 30)) * 0.15);
+  t('reps capped at 12', D.estimate1RM(100, 20), D.estimate1RM(100, 12));
+  t('weightForReps inverts Brzycki', D.weightForReps(100, 10), 100 * (37 - 10) / 36);
+  t('zero reps -> 0', D.estimate1RM(100, 0), 0);
+
+  // =====================================================================
+  group('Volume and PRs');
+  const sets = [
+    { id: 'w', completed: true, type: 'warmup', weightKg: 60, reps: 10 },
+    { id: 'a', completed: true, type: 'working', weightKg: 100, reps: 5 },
+    { id: 'b', completed: false, type: 'working', weightKg: 100, reps: 5 },
+  ];
+  t('volume excludes warmups and incompletes', D.volume(sets), 500);
+  const hist = [{ id: 'a', completed: true, type: 'working', weightKg: 100, reps: 5 }];
+  t('heavier set is a PR', D.isPR({ id: 'b', completed: true, type: 'working', weightKg: 110, reps: 5 }, hist) ? 1 : 0, 1);
+  t('lighter set is not', D.isPR({ id: 'c', completed: true, type: 'working', weightKg: 90, reps: 5 }, hist) ? 1 : 0, 0);
+  t('warmup never a PR', D.isPR({ id: 'd', completed: true, type: 'warmup', weightKg: 200, reps: 5 }, hist) ? 1 : 0, 0);
+  t('incomplete never a PR', D.isPR({ id: 'e', completed: false, type: 'working', weightKg: 200, reps: 5 }, hist) ? 1 : 0, 0);
+
+  // =====================================================================
+  group('Double progression');
+  const maxed = [
+    { completed: true, type: 'working', weightKg: 100, reps: 10 },
+    { completed: true, type: 'working', weightKg: 100, reps: 10 },
+  ];
+  t('lower body adds 5kg', D.suggestProgression(maxed, { isLowerBody: true }, { min: 6, max: 10 }).weightKg, 105);
+  t('upper body adds 2.5kg', D.suggestProgression(maxed, { isLowerBody: false }, { min: 6, max: 10 }).weightKg, 102.5);
+  t('resets to bottom of rep range', D.suggestProgression(maxed, { isLowerBody: true }, { min: 6, max: 10 }).reps, 6);
+  t('not yet maxed -> add one rep',
+    D.suggestProgression([{ completed: true, type: 'working', weightKg: 100, reps: 7 }], { isLowerBody: false }, { min: 6, max: 10 }).reps, 8);
+  t('RPE 9.5 blocks the load increase',
+    D.suggestProgression([{ completed: true, type: 'working', weightKg: 100, reps: 10, rpe: 9.5 }], { isLowerBody: false }, { min: 6, max: 10 }).weightKg, 100);
+  t('missing RPE does not block', D.suggestProgression(maxed, { isLowerBody: false }, { min: 6, max: 10 }).action === 'increase_weight' ? 1 : 0, 1);
+
+  // =====================================================================
+  group('Plate calculator');
+  const p1 = D.platesPerSide(100, 20, [25, 20, 15, 10, 5, 2.5, 1.25]);
+  t('100kg -> 40kg per side', p1.perSide, 40);
+  t('100kg -> 25 + 15', p1.plates.join('+') === '25+15' ? 1 : 0, 1);
+  t('100kg fully loadable', p1.remainderKg, 0);
+  // (61-20)/2 = 20.5; largest usable plate is 20, so 0.5 is unreachable.
+  const p2 = D.platesPerSide(61, 20, [25, 20, 15, 10, 5, 2.5, 1.25]);
+  t('61kg leaves 0.5kg per side', p2.remainderKg, 0.5);
+  t('61kg closest loadable = 60kg', 61 - p2.remainderKg * 2, 60);
+  t('empty bar needs no plates', D.platesPerSide(20, 20, [25]).plates.length, 0);
+  t('below bar weight is handled', D.platesPerSide(10, 20, [25]).perSide, 0);
+
+  // =====================================================================
+  group('Nutrition score');
+  const mk = (kcal, protein, extra, nova, hour) => ({
+    loggedAt: new Date(2026, 0, 1, hour == null ? 12 : hour).getTime(),
+    food: { novaGroup: nova },
+    nutrients: Object.assign({ kcal, protein, carbs: 0, fat: 0 }, extra || {}),
+  });
+  const targets = { kcal: 2000, protein: 100, carbs: 200, fat: 60 };
+  const st = { lateMealHour: 21, lateMealMinKcal: 150 };
+
+  const bare = D.nutritionScore([mk(2000, 100)], targets, st);
+  t('bare macros score only what is known', bare.components.length, 2);
+  t('protein at target = 100', bare.components.find((c) => c.key === 'protein').value, 100);
+  t('weights renormalise to 100', bare.score, 100);
+  t('unknown fibre is not scored as zero', bare.components.some((c) => c.key === 'fiber') ? 1 : 0, 0);
+
+  const half = D.nutritionScore([mk(2000, 50)], targets, st);
+  t('half protein scores 50', half.components.find((c) => c.key === 'protein').value, 50);
+  t('renormalised blend (50*20 + 100*10)/30', half.score, Math.round((50 * 20 + 100 * 10) / 30));
+
+  const fib = D.nutritionScore([mk(2000, 100, { fiber: 28 })], targets, st);
+  t('fibre 28g at 2000kcal hits target', fib.components.find((c) => c.key === 'fiber').value, 100);
+
+  t('late meal under kcal floor is ignored', D.nutritionScore([mk(100, 10, null, 1, 22)], targets, st).isLateMeal ? 1 : 0, 0);
+  t('late meal over kcal floor is flagged', D.nutritionScore([mk(600, 10, null, 1, 22)], targets, st).isLateMeal ? 1 : 0, 1);
+
+  t('whole-food 50/50 split = 50',
+    D.nutritionScore([mk(1000, 50, null, 1), mk(1000, 50, null, 4)], targets, st).components.find((c) => c.key === 'whole').value, 50);
+  t('NOVA known for <50% of kcal -> dropped',
+    D.nutritionScore([mk(1800, 50), mk(200, 5, null, 1)], targets, st).components.some((c) => c.key === 'whole') ? 1 : 0, 0);
+  t('empty day scores null', D.nutritionScore([], targets, st).score === null ? 1 : 0, 1);
+
+  // =====================================================================
+  group('Nutrient scaling');
+  const sc = D.scaleNutrients({ kcal: 100, protein: 10, fiber: null }, 250);
+  t('scales linearly to portion', sc.kcal, 250);
+  t('null stays absent (unknown != zero)', ('fiber' in sc) ? 1 : 0, 0);
+  t('explicit zero is preserved', D.scaleNutrients({ kcal: 100, fiber: 0 }, 100).fiber, 0);
+  t('sumNutrients adds present fields', D.sumNutrients([{ kcal: 100 }, { kcal: 50, fiber: 3 }]).kcal, 150);
+
+  // =====================================================================
+  group('Regression and trends');
+  const fit = D.linearRegression([{ x: 0, y: 3 }, { x: 1, y: 5 }, { x: 2, y: 7 }, { x: 3, y: 9 }]);
+  t('slope of y = 2x + 3', fit.slope, 2);
+  t('intercept of y = 2x + 3', fit.intercept, 3);
+  t('r2 of a perfect fit', fit.r2, 1);
+  t('single point cannot be fitted', D.linearRegression([{ x: 1, y: 1 }]) === null ? 1 : 0, 1);
+  t('zero x-variance cannot be fitted',
+    D.linearRegression([{ x: 1, y: 1 }, { x: 1, y: 2 }]) === null ? 1 : 0, 1);
+
+  const clean = [];
+  for (let i = 0; i < 10; i++) clean.push({ date: V.addDays('2026-01-01', i), value: 80 - i * 0.1 });
+  t('-0.1 kg/day = -0.7 kg/week', D.trend(clean, 30).perWeek, -0.7);
+  t('clean trend is reliable', D.trend(clean, 30).reliable ? 1 : 0, 1);
+  t('projection has 30 points', D.trend(clean, 30).projection.length, 30);
+
+  const noisy = [];
+  for (let i = 0; i < 10; i++) noisy.push({ date: V.addDays('2026-01-01', i), value: 80 + (i % 2 ? 2 : -2) });
+  t('noise is flagged unreliable', D.trend(noisy, 30).reliable ? 1 : 0, 0);
+
+  // =====================================================================
+  group('Streaks');
+  const today = V.today();
+  t('three consecutive days', D.streak([today, V.addDays(today, -1), V.addDays(today, -2)]), 3);
+  t('a gap breaks the streak', D.streak([today, V.addDays(today, -2)]), 1);
+  t('yesterday still counts (today not logged yet)', D.streak([V.addDays(today, -1)]), 1);
+  t('stale data scores zero', D.streak([V.addDays(today, -5)]), 0);
+  t('no data scores zero', D.streak([]), 0);
+
+  // =====================================================================
+  group('Dates and units');
+  t('crosses month end', V.addDays('2026-01-31', 1) === '2026-02-01' ? 1 : 0, 1);
+  t('crosses year end', V.addDays('2025-12-31', 1) === '2026-01-01' ? 1 : 0, 1);
+  t('handles leap day 2028', V.addDays('2028-02-28', 1) === '2028-02-29' ? 1 : 0, 1);
+  t('Jan 1 to Mar 1 2026 = 59 days', V.daysBetween('2026-01-01', '2026-03-01'), 59);
+  t('DST weekend is still 2 days', V.daysBetween('2026-03-07', '2026-03-09'), 2);
+  t('kg <-> lb round-trips', V.displayToKg(V.kgToDisplay(83.7, 'lb'), 'lb'), 83.7);
+  t('cm <-> in round-trips', V.displayToCm(V.cmToDisplay(178, 'in'), 'in'), 178);
+  t('1 lb = 0.45359237 kg', V.displayToKg(1, 'lb'), 0.45359237, 1e-9);
+
+  // =====================================================================
+  const summary = document.createElement('div');
+  summary.className = 'summary ' + (fail === 0 ? 'ok' : 'bad');
+  summary.textContent = fail === 0
+    ? `All ${pass} assertions passed.`
+    : `${fail} of ${pass + fail} assertions FAILED.`;
+  out.insertBefore(summary, out.firstChild);
+})();
+</script>
+</body>
+</html>
