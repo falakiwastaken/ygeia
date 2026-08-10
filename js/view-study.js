@@ -279,100 +279,6 @@
     });
   }
 
-  // =============================================================== reviews
-
-  function openReviewSheet() {
-    V.ui.sheet('Review', async (body) => {
-      const [items, subjects] = await Promise.all([V.store.study.reviews(), V.store.study.subjects()]);
-      const subById = {};
-      for (const s of subjects) subById[s.id] = s;
-
-      const due = V.study.dueItems(items);
-      if (!due.length) {
-        body.appendChild(V.ui.empty('Nothing due today. Come back tomorrow.'));
-      } else {
-        let index = 0;
-        const card = V.el('div');
-
-        function renderCard() {
-          card.innerHTML = '';
-          if (index >= due.length) {
-            card.appendChild(V.ui.empty('All caught up.'));
-            return;
-          }
-          const item = due[index];
-          const sub = subById[item.subjectId];
-
-          card.appendChild(
-            V.ui.card({
-              title: item.title,
-              sub: (sub ? sub.name + ' · ' : '') + `box ${item.box + 1} of ${V.study.LEITNER_INTERVALS.length}`,
-              children: [
-                V.el('div', { className: 'hint', text: `Card ${index + 1} of ${due.length}. Recall it, then answer honestly.` }),
-                V.el('div', { style: { height: '12px' } }),
-                V.el('div', { className: 'btn-row' }, [
-                  V.ui.button('Forgot', async () => {
-                    await V.store.study.saveReview(V.study.gradeReview(item, false));
-                    index++; renderCard();
-                  }, 'btn-danger'),
-                  V.ui.button('Got it', async () => {
-                    await V.store.study.saveReview(V.study.gradeReview(item, true));
-                    index++; renderCard();
-                  }, 'btn-good'),
-                ]),
-              ],
-            }),
-          );
-        }
-        renderCard();
-        body.appendChild(card);
-      }
-
-      // ---- Add a card -------------------------------------------------------
-      body.appendChild(V.ui.sectionTitle('Add a card'));
-      if (!subjects.length) {
-        body.appendChild(V.ui.empty('Create a subject first.'));
-        return;
-      }
-
-      const title = V.ui.input({ placeholder: 'What do you need to remember?' });
-      let subjectId = subjects[0].id;
-      const subWrap = V.el('div');
-      function renderSubs() {
-        subWrap.innerHTML = '';
-        subWrap.appendChild(
-          V.ui.segmented(
-            subjects.map((s) => ({ value: s.id, label: s.name })),
-            subjectId,
-            (v) => { subjectId = v; renderSubs(); },
-          ),
-        );
-      }
-      renderSubs();
-
-      body.appendChild(title);
-      body.appendChild(V.el('div', { style: { height: '8px' } }));
-      body.appendChild(subWrap);
-      body.appendChild(V.el('div', { style: { height: '8px' } }));
-      body.appendChild(
-        V.ui.button('Add card', async () => {
-          if (!title.value.trim()) return V.toast('Enter something to remember');
-          await V.store.study.saveReview(V.study.newReviewItem(subjectId, title.value.trim()));
-          title.value = '';
-          V.toast('Card added — due tomorrow');
-        }, 'btn-primary'),
-      );
-
-      body.appendChild(
-        V.el('div', {
-          className: 'hint',
-          text: 'Cards come back on an expanding schedule (1, 3, 7, 16, 35 days). Recalling ' +
-                'something just as you are about to forget it is what makes it stick.',
-        }),
-      );
-    });
-  }
-
   // =================================================================== view
 
   V.views.study = {
@@ -425,36 +331,20 @@
       );
 
       // ---- Flashcards --------------------------------------------------------
-      const due = V.study.dueItems(reviews);
       const decks = await V.store.study.decks();
-      const unfinished = reviews.filter((c) => !c.back).length;
 
       root.appendChild(
         V.ui.card({
           title: 'Flashcards',
-          sub: [
-            decks.length ? `${decks.length} deck(s)` : 'No decks yet',
-            reviews.length ? `${reviews.length} card(s)` : null,
-            due.length ? `${due.length} due` : null,
-          ].filter(Boolean).join(' · '),
-          action: due.length
-            ? V.el('div', { className: 'stat-value', style: { color: 'var(--good)' }, text: String(due.length) })
-            : null,
+          sub: decks.length
+            ? `${decks.length} deck(s) · ${reviews.length} card(s)`
+            : 'Make a deck, type your cards in, study it',
           children: [
-            unfinished
-              ? V.el('div', {
-                  className: 'hint',
-                  text: `${unfinished} card(s) still need an answer on the back.`,
-                })
-              : null,
-            V.el('div', { style: { height: '10px' } }),
             V.ui.button(
-              due.length ? `Review ${due.length} due card(s)` : 'Open decks',
+              decks.length ? 'Open decks' : 'Create your first deck',
               () => V.flashcards.openDecks(),
-              due.length ? 'btn-good' : 'btn-primary',
+              'btn-primary',
             ),
-            V.el('div', { style: { height: '8px' } }),
-            V.ui.button('Quick review (all subjects)', openReviewSheet, 'btn-ghost'),
           ],
         }),
       );

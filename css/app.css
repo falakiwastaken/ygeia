@@ -445,6 +445,23 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--info); outl
 .fc-right { background: var(--good); border-color: var(--good); color: var(--on-accent); }
 .fc-wrong { background: var(--bad); border-color: var(--bad); color: var(--on-accent); }
 
+/* Card builder rows — the Quizlet-style list editor */
+.fc-row {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: var(--sp-3);
+  margin-bottom: var(--sp-3);
+  box-shadow: var(--shadow-sm);
+}
+.fc-row-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-2); }
+.fc-row-num { font-size: 12px; color: var(--text-faint); font-weight: 600; }
+.fc-input {
+  width: 100%; resize: vertical; min-height: 40px;
+  margin-bottom: var(--sp-2);
+}
+.fc-input:last-child { margin-bottom: 0; }
+
 .fc-match {
   display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2);
   margin-bottom: var(--sp-4);
