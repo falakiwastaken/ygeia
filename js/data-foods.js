@@ -182,6 +182,50 @@
     return 0;
   }
 
+  /**
+   * Search synonyms.
+   *
+   * This library was written in British English, so "yogurt" returned nothing while
+   * "yoghurt" worked, and "coke" found nothing at all. Rather than duplicate entries, the
+   * query is expanded at search time — each word is also tried as its synonyms.
+   *
+   * Pairs are bidirectional and mirrored automatically; the one-way table is for cases
+   * where the reverse makes no sense (typing "cola" should not suggest "Pepsi").
+   */
+  const SYNONYM_PAIRS = [
+    ['yogurt', 'yoghurt'], ['cilantro', 'coriander'], ['zucchini', 'courgette'],
+    ['eggplant', 'aubergine'], ['arugula', 'rocket'], ['shrimp', 'prawns'],
+    ['garbanzo', 'chickpeas'], ['capsicum', 'pepper'], ['cookie', 'biscuit'],
+    ['fries', 'chips'], ['soda', 'cola'], ['wholewheat', 'wholemeal'],
+    ['oatmeal', 'oats'], ['porridge', 'oats'], ['beetroot', 'beet'],
+    ['swede', 'rutabaga'], ['maize', 'sweetcorn'], ['corn', 'sweetcorn'],
+    ['soya', 'soy'], ['aubergine', 'brinjal'], ['coriander', 'dhania'],
+  ];
+
+  const SYNONYM_ONE_WAY = {
+    coke: 'cola', pepsi: 'cola', sprite: 'cola', fanta: 'cola', pop: 'cola', fizzy: 'cola',
+    // Keys are matched per word, so multi-word keys would never fire.
+    ground: 'mince', hamburger: 'mince', wheat: 'wholemeal', whole: 'wholemeal',
+    hummous: 'hummus', houmous: 'hummus', yoghourt: 'yoghurt',
+    spud: 'potato', tatties: 'potato', chook: 'chicken', poultry: 'chicken',
+    mayo: 'mayonnaise', joe: 'coffee', brew: 'tea', crisps: 'chips',
+    scallion: 'onion', shallot: 'onion', greens: 'spinach',
+    protein: 'whey', shake: 'whey', pasta: 'pasta', noodle: 'noodles',
+    curd: 'cottage cheese', quark: 'cottage cheese',
+  };
+
+  V.FOOD_SYNONYMS = (function () {
+    const map = {};
+    const add = (from, to) => {
+      if (from === to) return;
+      map[from] = map[from] || [];
+      if (!map[from].includes(to)) map[from].push(to);
+    };
+    for (const [a, b] of SYNONYM_PAIRS) { add(a, b); add(b, a); }
+    for (const k in SYNONYM_ONE_WAY) add(k, SYNONYM_ONE_WAY[k]);
+    return map;
+  })();
+
   V.seedFoods = function () {
     return F.map((r) => {
       const [name, kcal, protein, carbs, fat, fiber, sugar, satFat, sodium, nova, servings] = r;

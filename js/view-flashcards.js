@@ -713,5 +713,6 @@
 
   F.MODES = MODES;
   F.byWeakest = byWeakest;
+  F.openCardBuilder = F.openBuilder; // alias kept for readability at call sites
   V.flashcards = F;
 })(window.V);

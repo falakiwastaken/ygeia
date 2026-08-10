@@ -9,45 +9,46 @@
  */
 
 // Bump this to ship an update — the old cache is dropped on activate.
-const CACHE = 'ygeia-v3';
+// Bump ASSET_VERSION in index.html and here together when shipping a change.
+const CACHE = 'ygeia-v6';
 
 const SHELL = [
   './',
   './index.html',
   './manifest.webmanifest',
-  './css/app.css',
-  './js/util.js',
-  './js/store.js',
-  './js/auth.js',
-  './js/domain.js',
-  './js/domain-life.js',
-  './js/domain-cut.js',
-  './js/domain-study.js',
-  './js/domain-rank.js',
-  './js/domain-plan.js',
-  './js/domain-insights.js',
-  './js/data-meals.js',
-  './js/data-programs.js',
-  './js/explain.js',
-  './js/data-foods.js',
-  './js/data-exercises.js',
-  './js/ui.js',
-  './js/charts.js',
-  './js/map.js',
-  './js/openfoodfacts.js',
-  './js/places.js',
-  './js/healthimport.js',
-  './js/view-today.js',
-  './js/view-food.js',
-  './js/view-train.js',
-  './js/view-study.js',
-  './js/view-flashcards.js',
-  './js/view-body.js',
-  './js/view-cut.js',
-  './js/view-plan.js',
-  './js/view-lock.js',
-  './js/view-settings.js',
-  './js/app.js',
+  './css/app.css?v=6',
+  './js/util.js?v=6',
+  './js/store.js?v=6',
+  './js/auth.js?v=6',
+  './js/domain.js?v=6',
+  './js/domain-life.js?v=6',
+  './js/domain-cut.js?v=6',
+  './js/domain-study.js?v=6',
+  './js/domain-rank.js?v=6',
+  './js/domain-plan.js?v=6',
+  './js/domain-insights.js?v=6',
+  './js/data-meals.js?v=6',
+  './js/data-programs.js?v=6',
+  './js/explain.js?v=6',
+  './js/data-foods.js?v=6',
+  './js/data-exercises.js?v=6',
+  './js/ui.js?v=6',
+  './js/charts.js?v=6',
+  './js/map.js?v=6',
+  './js/openfoodfacts.js?v=6',
+  './js/places.js?v=6',
+  './js/healthimport.js?v=6',
+  './js/view-today.js?v=6',
+  './js/view-food.js?v=6',
+  './js/view-train.js?v=6',
+  './js/view-study.js?v=6',
+  './js/view-flashcards.js?v=6',
+  './js/view-body.js?v=6',
+  './js/view-cut.js?v=6',
+  './js/view-plan.js?v=6',
+  './js/view-lock.js?v=6',
+  './js/view-settings.js?v=6',
+  './js/app.js?v=6',
   './icons/icon.svg',
   './icons/icon-180.png',
 ];
@@ -83,10 +84,39 @@ self.addEventListener('fetch', (event) => {
   // unbounded.
   if (url.origin !== self.location.origin) return;
 
+  /*
+   * Navigations and the HTML shell are NETWORK-FIRST.
+   *
+   * Cache-first on index.html meant every update took two loads to appear: the first
+   * served the stale shell, and only the background refresh made the next one current.
+   * For a page whose whole job is to list the current script tags, that is the wrong
+   * trade — it looks exactly like "my changes did nothing". The network is tried first
+   * and the cache is the offline fallback.
+   */
+  const isShell = req.mode === 'navigate' ||
+    url.pathname.endsWith('/') ||
+    url.pathname.endsWith('.html');
+
+  if (isShell) {
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          if (res && res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put(req, copy));
+          }
+          return res;
+        })
+        .catch(() => caches.match(req).then((c) => c || caches.match('./index.html'))),
+    );
+    return;
+  }
+
+  // Everything else stays cache-first: scripts and styles are cheap to revalidate in the
+  // background, and serving them instantly is what makes the app feel native offline.
   event.respondWith(
     caches.match(req).then((cached) => {
       if (cached) {
-        // Refresh in the background so the next launch gets the newer file.
         fetch(req)
           .then((res) => {
             if (res && res.ok) caches.open(CACHE).then((c) => c.put(req, res.clone()));

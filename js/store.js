@@ -245,27 +245,52 @@
     },
 
     /**
-     * Substring search over the local library, ranked so that a prefix match on the name
-     * beats a match buried in the middle, and shorter names beat longer ones. Loads all
-     * foods and filters in memory: with a few thousand records that is well under a frame,
-     * and it avoids maintaining a separate search index.
+     * Token search over the local library.
+     *
+     * Every word in the query must appear somewhere in the food's name or brand — so
+     * "greek yogurt" finds "Greek yoghurt, 0% fat" while plain substring matching would
+     * not. Each word is also tried as its synonyms (see V.FOOD_SYNONYMS), which is what
+     * makes "yogurt", "coke" and "eggplant" work against a library written in British
+     * English.
+     *
+     * Loads everything and filters in memory: with a few thousand records that is well
+     * under a frame, and it avoids maintaining a separate index.
      */
     async search(query, limit) {
-      const q = String(query || '').trim().toLowerCase();
-      if (!q) return [];
+      const raw = String(query || '').trim().toLowerCase();
+      if (!raw) return [];
       const list = await db.all('foods');
+
+      const synonyms = V.FOOD_SYNONYMS || {};
+      const tokens = raw.split(/\s+/).filter(Boolean).map((tok) => [tok].concat(synonyms[tok] || []));
+
       const scored = [];
       for (const f of list) {
         const name = (f.name || '').toLowerCase();
-        const brand = (f.brand || '').toLowerCase();
-        let score = -1;
-        if (name.startsWith(q)) score = 0;
-        else if (name.includes(q)) score = 1;
-        else if (brand.includes(q)) score = 2;
-        if (score < 0) continue;
-        // Custom foods first at equal relevance — the user's own entries are what they mean.
-        scored.push({ f, score: score * 1000 + name.length - (f.source === 'custom' ? 500 : 0) });
+        const haystack = name + ' ' + (f.brand || '').toLowerCase();
+
+        let matchedAll = true;
+        let bonus = 0;
+
+        for (const variants of tokens) {
+          const hit = variants.find((v) => haystack.includes(v));
+          if (!hit) { matchedAll = false; break; }
+          // Prefer the word actually typed over a synonym, and a word starting the name
+          // over one buried in it.
+          if (hit === variants[0]) bonus -= 25;
+          if (name.startsWith(hit)) bonus -= 60;
+        }
+        if (!matchedAll) continue;
+
+        let score = name.length + bonus;
+        if (name.startsWith(raw)) score -= 500;
+        else if (name.includes(raw)) score -= 200;
+        // The user's own entries are almost always what they meant.
+        if (f.source === 'custom') score -= 300;
+
+        scored.push({ f, score });
       }
+
       scored.sort((a, b) => a.score - b.score);
       return scored.slice(0, limit || 40).map((s) => s.f);
     },

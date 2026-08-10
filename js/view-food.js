@@ -135,6 +135,7 @@
     V.ui.sheet('Add food', (body) => {
       const results = V.el('div');
       let lastQuery = '';
+      let remoteFailed = false;
 
       const input = V.ui.input({
         type: 'search',
@@ -173,9 +174,14 @@
           const remote = await V.off.search(q, 20);
           if (q !== lastQuery) return;
           const seen = new Set(local.map((f) => f.id));
+          remoteFailed = false;
           renderResults(local, remote.filter((f) => !seen.has(f.id)));
         } catch (err) {
-          /* Offline or blocked — local results stand on their own. */
+          // Open Food Facts' text search is frequently unreachable from a browser even
+          // when their barcode endpoint is fine. Say so rather than showing an empty list
+          // that looks like "this food does not exist".
+          remoteFailed = true;
+          renderResults(local, []);
         }
       }, 280);
 
@@ -200,6 +206,17 @@
         if (remote.length) {
           results.appendChild(V.ui.sectionTitle('Open Food Facts'));
           results.appendChild(V.ui.list(remote.map(foodRow)));
+        }
+
+        if (remoteFailed && input.value.trim()) {
+          results.appendChild(
+            V.el('div', {
+              className: 'hint',
+              style: { marginTop: '10px' },
+              text: 'Could not reach Open Food Facts, so only your own library is shown. ' +
+                    'Scanning or typing a barcode still works, and you can add the food yourself below.',
+            }),
+          );
         }
 
         results.appendChild(V.el('div', { style: { height: '12px' } }));
