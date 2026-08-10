@@ -242,6 +242,180 @@
     });
   }
 
+  // ========================================================== quick log sheet
+
+  /**
+   * Type a whole meal in one line and log it.
+   *
+   * Everything parsed stays editable before anything is written — a wrong match or a
+   * guessed portion is a tap away from being corrected, and guesses are visibly marked
+   * so they get looked at rather than silently accepted.
+   */
+  function openQuickLogSheet(meal) {
+    V.ui.sheet('Quick log', (body) => {
+      let rows = [];
+      let slot = meal || defaultMeal();
+
+      const input = V.el('textarea', {
+        rows: 3,
+        placeholder: '200g chicken breast, 2 eggs and a banana',
+      });
+      const preview = V.el('div');
+      const totals = V.el('div', { className: 'hint' });
+
+      const rerender = () => {
+        preview.innerHTML = '';
+
+        if (!rows.length) {
+          totals.textContent = '';
+          return;
+        }
+
+        preview.appendChild(V.ui.sectionTitle('Parsed'));
+        preview.appendChild(
+          V.ui.list(
+            rows.map((row, i) => {
+              if (!row.matched) {
+                return V.ui.row({
+                  title: row.item.name,
+                  sub: 'No match in your library — tap to search',
+                  value: '?',
+                  onClick: () => {
+                    V.ui.closeSheet();
+                    openSearchSheet(slot);
+                  },
+                });
+              }
+
+              const nutrients = V.domain.scaleNutrients(row.food.per100, row.grams);
+              const gramsInput = V.ui.input({
+                type: 'number',
+                value: String(V.round(row.grams, 1)),
+                style: { width: '84px', textAlign: 'right', padding: '6px 8px' },
+              });
+              gramsInput.addEventListener('input', () => {
+                rows[i].grams = V.ui.num(gramsInput, 0);
+                updateTotals();
+              });
+              gramsInput.addEventListener('click', (e) => e.stopPropagation());
+
+              return V.ui.row({
+                title: row.food.name,
+                sub: (row.confident ? row.basis : '⚠ ' + row.basis) +
+                     ' · ' + V.fmt(nutrients.kcal) + ' kcal',
+                accessory: V.el('div', { style: { display: 'flex', alignItems: 'center', gap: '4px' } }, [
+                  gramsInput,
+                  V.el('span', { className: 'row-sub', text: 'g' }),
+                ]),
+                // Tapping the row cycles to the next candidate, so a wrong match is one tap
+                // to fix rather than a trip back to search.
+                onClick: row.candidates.length > 1
+                  ? () => {
+                      const next = (row.candidates.indexOf(row.food) + 1) % row.candidates.length;
+                      rows[i].food = row.candidates[next];
+                      const portion = V.foodParser.toGrams(row.item, rows[i].food);
+                      rows[i].grams = V.round(portion.grams, 1);
+                      rows[i].basis = portion.basis;
+                      rows[i].confident = portion.confident;
+                      rerender();
+                    }
+                  : null,
+              });
+            }),
+          ),
+        );
+
+        if (rows.some((r) => r.matched && r.candidates.length > 1)) {
+          preview.appendChild(
+            V.el('div', { className: 'hint', text: 'Wrong food? Tap the row to cycle through the other matches.' }),
+          );
+        }
+        updateTotals();
+      };
+
+      function updateTotals() {
+        const matched = rows.filter((r) => r.matched);
+        const sum = V.domain.sumNutrients(
+          matched.map((r) => V.domain.scaleNutrients(r.food.per100, r.grams)),
+        );
+        const unmatched = rows.length - matched.length;
+        totals.textContent =
+          `${matched.length} item(s) · ${V.fmt(sum.kcal)} kcal · ${V.fmt(sum.protein)}g protein` +
+          (unmatched ? ` · ${unmatched} not matched` : '');
+      }
+
+      const runParse = V.debounce(async () => {
+        const text = input.value.trim();
+        if (!text) { rows = []; rerender(); return; }
+        rows = await V.foodParser.parseAndResolve(text);
+        rerender();
+      }, 300);
+
+      input.addEventListener('input', runParse);
+
+      body.appendChild(
+        V.el('div', {
+          className: 'hint',
+          text: 'Write it how you would say it. Weights, counts and portions all work.',
+        }),
+      );
+      body.appendChild(input);
+
+      const slotWrap = V.el('div');
+      const renderSlot = () => {
+        slotWrap.innerHTML = '';
+        slotWrap.appendChild(
+          V.ui.segmented(
+            MEALS.map((m) => ({ value: m, label: MEAL_LABEL[m] })),
+            slot,
+            (v) => { slot = v; renderSlot(); },
+          ),
+        );
+      };
+      renderSlot();
+      body.appendChild(V.el('div', { style: { height: '10px' } }));
+      body.appendChild(V.ui.field('Meal', slotWrap));
+
+      body.appendChild(preview);
+      body.appendChild(totals);
+      body.appendChild(V.el('div', { style: { height: '14px' } }));
+
+      body.appendChild(
+        V.ui.button('Log everything', async () => {
+          const matched = rows.filter((r) => r.matched && r.grams > 0);
+          if (!matched.length) return V.toast('Nothing to log yet');
+
+          const now = Date.now();
+          for (const row of matched) {
+            if (!(await V.store.foods.get(row.food.id))) await V.store.foods.save(row.food);
+            await V.store.foodLog.save({
+              id: V.uid(),
+              date: V.app.state.date,
+              loggedAt: now,
+              foodId: row.food.id,
+              meal: slot,
+              grams: row.grams,
+            });
+          }
+
+          V.ui.closeSheet(true);
+          V.toast(`Logged ${matched.length} item(s)`);
+          V.app.render();
+        }, 'btn-primary'),
+      );
+
+      body.appendChild(
+        V.el('div', {
+          className: 'hint',
+          text: 'Parsed on your device with no model and no network — instant, and it works ' +
+                'in airplane mode.',
+        }),
+      );
+
+      setTimeout(() => input.focus(), 60);
+    });
+  }
+
   // ======================================================= custom food sheet
 
   function openCustomFoodSheet(meal) {
@@ -409,6 +583,8 @@
 
       root.appendChild(V.el('div', { style: { height: '16px' } }));
       root.appendChild(V.ui.button('Add food', () => openSearchSheet(defaultMeal()), 'btn-primary'));
+      root.appendChild(V.el('div', { style: { height: '8px' } }));
+      root.appendChild(V.ui.button('Quick log — type a whole meal', () => openQuickLogSheet(defaultMeal()), 'btn-ghost'));
       root.appendChild(V.el('div', { style: { height: '8px' } }));
       root.appendChild(V.ui.button('Meal ideas & shopping list', () => V.planView.openMealPlannerSheet(), 'btn-ghost'));
       root.appendChild(V.el('div', { style: { height: '8px' } }));

@@ -262,7 +262,31 @@
       const list = await db.all('foods');
 
       const synonyms = V.FOOD_SYNONYMS || {};
-      const tokens = raw.split(/\s+/).filter(Boolean).map((tok) => [tok].concat(synonyms[tok] || []));
+
+      /**
+       * Singular/plural variants. The library stores "Egg, whole, raw", so a search for
+       * "eggs" would otherwise miss it entirely — which is exactly what people type.
+       */
+      const forms = (tok) => {
+        const set = [tok];
+        if (tok.length > 3) {
+          if (/ies$/.test(tok)) set.push(tok.slice(0, -3) + 'y');
+          // "potatoes" -> "potato", "tomatoes" -> "tomato"
+          else if (/oes$/.test(tok)) set.push(tok.slice(0, -2));
+          else if (/(ch|sh|s|x|z)es$/.test(tok)) set.push(tok.slice(0, -2));
+          else if (/s$/.test(tok)) set.push(tok.slice(0, -1));
+          else set.push(tok + 's');
+        }
+        return set;
+      };
+
+      const tokens = raw.split(/\s+/).filter(Boolean).map((tok) => {
+        const variants = forms(tok);
+        for (const syn of synonyms[tok] || []) {
+          for (const f of forms(syn)) if (!variants.includes(f)) variants.push(f);
+        }
+        return variants;
+      });
 
       const scored = [];
       for (const f of list) {
@@ -283,6 +307,17 @@
         if (!matchedAll) continue;
 
         let score = name.length + bonus;
+
+        /*
+         * Names in this library read "Food, qualifier, qualifier" — "Egg, whole, raw",
+         * "Potato, boiled". So an exact hit on the part before the first comma means the
+         * user named the food itself rather than a variant of it. Without this, searching
+         * "eggs" returns "Egg white" simply because it is a shorter string.
+         */
+        const head = name.split(',')[0].trim();
+        if (head === raw) score -= 900;
+        else if (tokens.length === 1 && tokens[0].includes(head)) score -= 800;
+
         if (name.startsWith(raw)) score -= 500;
         else if (name.includes(raw)) score -= 200;
         // The user's own entries are almost always what they meant.

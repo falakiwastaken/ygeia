@@ -42,6 +42,7 @@
 <script src="js/map.js"></script>
 <script src="js/data-foods.js"></script>
 <script src="js/data-exercises.js"></script>
+<script src="js/food-parser.js"></script>
 <script src="js/data-meals.js"></script>
 <script src="js/data-programs.js"></script>
 <script>
@@ -583,6 +584,97 @@
   t('unsplittable lines are not imported', V.study.parseBulk('just one side').rows.length, 0);
   t('export round-trips',
     V.study.parseBulk(V.study.toBulkText([{ front: 'x', back: 'y' }])).rows[0].back === 'y' ? 1 : 0, 1);
+
+  // =====================================================================
+  group('Food parser — numbers');
+  const pn = V.foodParser.parseNumber;
+  t('plain integer', pn('200'), 200);
+  t('decimal', pn('1.5'), 1.5);
+  t('word "two"', pn('two'), 2);
+  t('word "a" means one', pn('a'), 1);
+  t('word "half"', pn('half'), 0.5);
+  t('word "dozen"', pn('dozen'), 12);
+  t('fraction 1/2', pn('1/2'), 0.5);
+  t('fraction 3/4', pn('3/4'), 0.75);
+  t('vulgar half', pn('½'), 0.5);
+  t('mixed number', pn('1½'), 1.5);
+  t('non-number returns null', pn('chicken') === null ? 1 : 0, 1);
+
+  // =====================================================================
+  group('Food parser — phrases');
+  const pi = V.foodParser.parseItem;
+
+  const a1 = pi('200g chicken breast');
+  t('quantity first: qty', a1.qty, 200);
+  t('quantity first: unit', a1.unit === 'g' ? 1 : 0, 1);
+  t('quantity first: name', a1.name === 'chicken breast' ? 1 : 0, 1);
+
+  // People write the weight after the food just as often.
+  const a2 = pi('chicken breast 200g');
+  t('quantity last: qty', a2.qty, 200);
+  t('quantity last: name', a2.name === 'chicken breast' ? 1 : 0, 1);
+
+  const a3 = pi('2 eggs');
+  t('bare count: qty', a3.qty, 2);
+  // "egg" is both a unit-ish noun and the food; stripping it would leave nothing, so it
+  // must be treated as the food.
+  t('bare count keeps the food name', a3.name.indexOf('egg') === 0 ? 1 : 0, 1);
+
+  const a4 = pi('a banana');
+  t('"a" is a quantity of one', a4.qty, 1);
+  t('"a" leaves the food name intact', a4.name === 'banana' ? 1 : 0, 1);
+
+  const a5 = pi('2 slices of wholemeal bread');
+  t('serving unit is captured', a5.unit === 'slices' ? 1 : 0, 1);
+  t('"of" is dropped as noise', a5.name === 'wholemeal bread' ? 1 : 0, 1);
+  t('serving unit qty', a5.qty, 2);
+
+  t('no quantity defaults to one', pi('banana').qty, 1);
+  t('no quantity is flagged', pi('banana').hadExplicitQty ? 1 : 0, 0);
+  t('explicit quantity is flagged', pi('2 bananas').hadExplicitQty ? 1 : 0, 1);
+  t('empty phrase returns null', pi('   ') === null ? 1 : 0, 1);
+  t('filler words are stripped',
+    pi('about 100 g of chicken').name === 'chicken' ? 1 : 0, 1);
+
+  // =====================================================================
+  group('Food parser — splitting');
+  const si = V.foodParser.splitItems;
+  t('splits on commas', si('a, b, c').length, 3);
+  t('splits on "and"', si('eggs and bacon').length, 2);
+  t('splits on "with"', si('toast with butter').length, 2);
+  t('splits on newlines', si('a\nb').length, 2);
+  t('collapses empty segments', si('a,,,b').length, 2);
+  t('full sentence parses to three items',
+    V.foodParser.parse('200g chicken breast, 2 eggs and a banana').length, 3);
+
+  // =====================================================================
+  group('Food parser — portions');
+  const portionOf = V.foodParser.toGrams;
+  const bread = { servings: [{ label: 'slice', grams: 36 }] };
+  const egg = { servings: [{ label: 'large egg', grams: 50 }] };
+  const plain = { servings: [] };
+
+  t('grams are taken literally', portionOf({ qty: 200, unit: 'g' }, plain).grams, 200);
+  t('kg converts', portionOf({ qty: 1.5, unit: 'kg' }, plain).grams, 1500);
+  t('ounces convert', portionOf({ qty: 4, unit: 'oz' }, plain).grams, 4 * 28.3495);
+  t('pounds convert', portionOf({ qty: 1, unit: 'lb' }, plain).grams, 453.592);
+  t('a measured weight is confident', portionOf({ qty: 200, unit: 'g' }, plain).confident ? 1 : 0, 1);
+
+  // A slice of bread must use the bread's own serving, not a generic guess.
+  t('serving unit uses the food\'s own serving', portionOf({ qty: 2, unit: 'slices' }, bread).grams, 72);
+  t('and is confident', portionOf({ qty: 2, unit: 'slices' }, bread).confident ? 1 : 0, 1);
+  // With no matching serving it falls back, and must say so.
+  t('unknown serving falls back', portionOf({ qty: 1, unit: 'slice' }, plain).grams, 30);
+  t('fallback is NOT confident', portionOf({ qty: 1, unit: 'slice' }, plain).confident ? 1 : 0, 0);
+
+  t('bare count uses the first serving',
+    portionOf({ qty: 2, hadExplicitQty: true }, egg).grams, 100);
+  t('bare count with no servings guesses 100g each',
+    portionOf({ qty: 2, hadExplicitQty: true }, plain).grams, 200);
+  t('that guess is flagged',
+    portionOf({ qty: 2, hadExplicitQty: true }, plain).confident ? 1 : 0, 0);
+  t('no quantity and no servings is one 100g portion',
+    portionOf({ qty: 1, hadExplicitQty: false }, plain).grams, 100);
 
   // =====================================================================
   group('Program sessions');
