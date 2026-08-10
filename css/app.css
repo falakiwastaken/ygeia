@@ -408,6 +408,59 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--info); outl
   font-size: 13px; color: var(--text-dim); line-height: 1.5;
 }
 
+/* ---------------------------------------------------------- lock screen -- */
+
+#lock-screen {
+  position: fixed; inset: 0; z-index: 100;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  padding: var(--safe-top) var(--sp-4) calc(var(--safe-bottom) + var(--sp-4));
+}
+#lock-screen[hidden] { display: none; }
+
+.lock-panel {
+  width: 100%; max-width: 340px;
+  display: flex; flex-direction: column; align-items: center;
+}
+.lock-panel.shake { animation: shake .4s cubic-bezier(.36,.07,.19,.97); }
+@keyframes shake {
+  10%, 90% { transform: translateX(-2px); }
+  20%, 80% { transform: translateX(4px); }
+  30%, 50%, 70% { transform: translateX(-7px); }
+  40%, 60% { transform: translateX(7px); }
+}
+
+.lock-mark { color: var(--recovery); margin-bottom: var(--sp-3); }
+.lock-title { font-family: var(--font-display); font-size: 26px; margin: 0 0 4px; }
+.lock-subtitle { font-size: 14px; color: var(--text-dim); margin-bottom: var(--sp-5); }
+
+.lock-dots { display: flex; gap: 12px; margin-bottom: var(--sp-3); min-height: 14px; }
+.lock-dot {
+  width: 13px; height: 13px; border-radius: 50%;
+  border: 1.5px solid var(--text-faint); background: none;
+  transition: background .12s ease, border-color .12s ease, transform .12s ease;
+}
+.lock-dot.on { background: var(--recovery); border-color: var(--recovery); transform: scale(1.12); }
+
+.lock-message { font-size: 13px; min-height: 20px; color: var(--text-dim); text-align: center; margin-bottom: var(--sp-3); }
+.lock-message.error { color: var(--bad); }
+
+.lock-keypad {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-3); width: 100%; margin-bottom: var(--sp-4);
+}
+.lock-key {
+  aspect-ratio: 1; border-radius: 50%;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--text); font-family: var(--font-display); font-size: 24px;
+  cursor: pointer; display: grid; place-items: center;
+  box-shadow: var(--shadow-sm);
+  transition: transform .08s ease, background .12s ease;
+}
+.lock-key:active { transform: scale(.94); background: var(--surface-2); }
+.lock-key-alt { font-family: var(--font-body); font-size: 14px; color: var(--text-dim); background: none; border-color: transparent; box-shadow: none; }
+.lock-confirm { max-width: 340px; }
+
 /* Weight-cut phase timeline */
 .phase { position: relative; padding-left: var(--sp-5); padding-bottom: var(--sp-4); }
 .phase:before {

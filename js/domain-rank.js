@@ -46,15 +46,24 @@
    * Guild ranks. Deliberately themed rather than Bronze/Silver/Gold — the point is a
    * long ladder where each step feels earned.
    */
+  /**
+   * Thresholds are pinned to the strength standards rather than spread evenly, so a rank
+   * means something specific:
+   *   Adept       = intermediate standards (600)
+   *   Expert      = approaching advanced
+   *   Master      = advanced (800+)
+   *   Legend      = elite (1000) across your best three lifts
+   * Reaching Legend therefore requires elite numbers on three lifts, not one good day.
+   */
   R.TIERS = [
-    { name: 'Novice',      min: 0,   color: 'var(--text-dim)' },
-    { name: 'Apprentice',  min: 200, color: 'var(--recovery)' },
-    { name: 'Journeyman',  min: 380, color: 'var(--info)' },
-    { name: 'Adept',       min: 550, color: 'var(--sleep)' },
-    { name: 'Expert',      min: 700, color: 'var(--nutrition)' },
-    { name: 'Master',      min: 830, color: 'var(--strain)' },
-    { name: 'Grandmaster', min: 930, color: 'var(--stress)' },
-    { name: 'Legend',      min: 990, color: 'var(--bad)' },
+    { name: 'Novice',      min: 0,    color: 'var(--text-dim)' },
+    { name: 'Apprentice',  min: 250,  color: 'var(--recovery)' },
+    { name: 'Journeyman',  min: 430,  color: 'var(--info)' },
+    { name: 'Adept',       min: 600,  color: 'var(--sleep)' },
+    { name: 'Expert',      min: 740,  color: 'var(--nutrition)' },
+    { name: 'Master',      min: 860,  color: 'var(--strain)' },
+    { name: 'Grandmaster', min: 950,  color: 'var(--stress)' },
+    { name: 'Legend',      min: 1000, color: 'var(--bad)' },
   ];
 
   /** Score one lift, 0–1000, from an estimated 1RM. */
@@ -133,20 +142,51 @@
   // =========================================================================
 
   /**
-   * Rank moves slowly, because real strength does. XP gives something that moves every
-   * session, so consistency is visibly rewarded rather than only peak performance.
+   * Rank moves slowly, because real strength does. XP moves every session.
+   *
+   * Weighted towards LOAD rather than volume. Simply completing sets pays very little —
+   * otherwise the fastest way to level is twenty easy sets, which is the opposite of the
+   * behaviour worth rewarding. Most of a set's XP comes from an intensity bonus scaled by
+   * how the lift compares to the strength standards for your bodyweight, so heavier work
+   * is worth several times more per set.
    */
   R.XP = {
-    perSession: 50,
-    perWorkingSet: 8,
-    perPR: 120,
-    perSportSession: 35,
-    // Weekly consistency bonus, awarded per session in a week with 3 or more.
-    consistencyBonus: 25,
+    perSession: 25,
+    // Turning up and completing a set. Deliberately small.
+    perWorkingSet: 2,
+    // Maximum bonus for a single set, at elite-level load.
+    maxIntensityBonus: 25,
+    perPR: 150,
+    perSportSession: 20,
   };
 
-  R.sessionXp = function (workingSets, prCount) {
-    return R.XP.perSession + workingSets * R.XP.perWorkingSet + (prCount || 0) * R.XP.perPR;
+  /**
+   * XP for one completed set.
+   *
+   * The bonus curve is exponent 1.5, so it accelerates: a beginner-level set earns barely
+   * more than the flat rate, an intermediate set several times that, and an elite set
+   * roughly thirteen times a beginner's. Unrated lifts (curls, calf raises) earn only the
+   * flat rate — there is no standard to judge them against, and accessory volume should
+   * not be a route to levelling.
+   */
+  R.setXp = function (set, exerciseId, bodyweightKg, sex) {
+    if (!set || !set.completed || set.type === 'warmup') return 0;
+    if (!set.reps || !set.weightKg) return 0;
+
+    const base = R.XP.perWorkingSet;
+    const oneRM = V.domain.estimate1RM(set.weightKg, set.reps);
+    const score = R.liftScore(exerciseId, oneRM, bodyweightKg, sex);
+    if (score == null) return base;
+
+    // Allow a little headroom past elite so beating the standards keeps paying.
+    const norm = V.clamp(score / 1000, 0, 1.25);
+    return base + Math.pow(norm, 1.5) * R.XP.maxIntensityBonus;
+  };
+
+  /** Total XP for a session's sets. */
+  R.sessionXp = function (sets, exerciseIdOf, bodyweightKg, sex, prCount) {
+    const setTotal = V.sum(sets, (s) => R.setXp(s, exerciseIdOf ? exerciseIdOf(s) : s.exerciseId, bodyweightKg, sex));
+    return R.XP.perSession + setTotal + (prCount || 0) * R.XP.perPR;
   };
 
   /**
@@ -191,11 +231,25 @@
     liftScores.sort((a, b) => (b.score || 0) - (a.score || 0));
 
     const rating = R.overall(liftScores);
-    const totalXp =
+
+    // XP is summed per SET so that load drives it, rather than multiplying a flat rate by
+    // the number of sets. Twenty easy sets should not out-earn five heavy ones.
+    let setXp = 0;
+    let ratedSets = 0;
+    for (const exId in setsByExercise) {
+      for (const s of setsByExercise[exId]) {
+        const gained = R.setXp(s, exId, bodyweightKg, sex);
+        setXp += gained;
+        if (gained > R.XP.perWorkingSet) ratedSets++;
+      }
+    }
+
+    const totalXp = Math.round(
       (workoutCount || 0) * R.XP.perSession +
-      (totalWorkingSets || 0) * R.XP.perWorkingSet +
+      setXp +
       (prCount || 0) * R.XP.perPR +
-      (sportCount || 0) * R.XP.perSportSession;
+      (sportCount || 0) * R.XP.perSportSession,
+    );
 
     return {
       rating,
@@ -203,6 +257,10 @@
       progress: R.progress(rating),
       liftScores,
       totalXp,
+      setXp: Math.round(setXp),
+      ratedSets,
+      totalWorkingSets: totalWorkingSets || 0,
+      bodyweightKg,
       level: R.levelFor(totalXp),
     };
   };

@@ -129,13 +129,29 @@
     });
 
     // Returning to the app after midnight should roll the date over.
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState !== 'visible') return;
+    document.addEventListener('visibilitychange', async () => {
+      if (document.visibilityState !== 'visible') {
+        // Start the auto-lock clock the moment the app is backgrounded.
+        V.auth.touch();
+        return;
+      }
       if (app.state.date !== V.today() && app.state.wasToday) {
         app.state.date = V.today();
       }
+
+      const s = await V.store.settings.get();
+      if (s.autoLockMinutes && V.auth.shouldAutoLock(s.autoLockMinutes)) {
+        V.auth.lock();
+        V.ui.closeSheet(true);
+        await V.lockScreen.requireUnlock();
+      }
       app.render();
     });
+
+    // Any interaction counts as activity, so the app does not lock mid-use.
+    for (const ev of ['pointerdown', 'keydown']) {
+      document.addEventListener(ev, () => V.auth.touch(), { passive: true });
+    }
   }
 
   // ----------------------------------------------------------------- boot --
@@ -154,6 +170,14 @@
 
     await seedIfNeeded();
     await app.applyTheme();
+
+    // Gate everything behind the passcode before any data reaches the screen.
+    if (await V.auth.isSet()) {
+      await V.lockScreen.requireUnlock();
+    } else {
+      V.auth.markUnlocked();
+    }
+
     wireChrome();
     app.go('today');
 

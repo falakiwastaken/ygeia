@@ -341,14 +341,46 @@
     V.rank.overall([{ score: 900 }, { score: 900 }, { score: 900 }, { score: 100 }]), 900);
   t('no lifts means unranked', V.rank.overall([]) === null ? 1 : 0, 1);
 
+  // Tiers are pinned to the strength standards: Adept = intermediate (600),
+  // Master = advanced (860), Legend = elite (1000) across the best three lifts.
   t('rating 0 is Novice', V.rank.tierFor(0).name === 'Novice' ? 1 : 0, 1);
-  t('rating 600 is Adept', V.rank.tierFor(600).name === 'Adept' ? 1 : 0, 1);
-  t('rating 995 is Legend', V.rank.tierFor(995).name === 'Legend' ? 1 : 0, 1);
+  t('intermediate (600) is Adept', V.rank.tierFor(600).name === 'Adept' ? 1 : 0, 1);
+  t('995 is Grandmaster, not Legend', V.rank.tierFor(995).name === 'Grandmaster' ? 1 : 0, 1);
+  t('Legend requires elite (1000)', V.rank.tierFor(1000).name === 'Legend' ? 1 : 0, 1);
   t('tiers ascend monotonically',
     V.rank.TIERS.every((x, i, a) => i === 0 || x.min > a[i - 1].min) ? 1 : 0, 1);
-  t('progress reports points to next rank', V.rank.progress(200).pointsToNext, 180);
+  t('progress reports points to next rank', V.rank.progress(200).pointsToNext, 50);
   t('XP level rises with XP', V.rank.levelFor(5000).level > V.rank.levelFor(500).level ? 1 : 0, 1);
   t('zero XP is level 1', V.rank.levelFor(0).level, 1);
+
+  // =====================================================================
+  group('XP weighting (load over volume)');
+  const BW = 80;
+  // Sets taken at 85% of the 1RM implied by each standard, for 4 reps.
+  const setAt = (mult) => {
+    const oneRM = mult * BW;
+    return { completed: true, type: 'working', weightKg: oneRM * 0.85, reps: 4 };
+  };
+  const xpAt = (mult) => V.rank.setXp(setAt(mult), 'ex-back-squat', BW, 'male');
+
+  t('a warmup earns nothing',
+    V.rank.setXp({ completed: true, type: 'warmup', weightKg: 200, reps: 5 }, 'ex-back-squat', BW, 'male'), 0);
+  t('an uncompleted set earns nothing',
+    V.rank.setXp({ completed: false, type: 'working', weightKg: 200, reps: 5 }, 'ex-back-squat', BW, 'male'), 0);
+  t('flat rate is small', V.rank.XP.perWorkingSet, 2);
+  t('unrated lifts earn only the flat rate',
+    V.rank.setXp(setAt(1.75), 'ex-lateral-raise', BW, 'male'), V.rank.XP.perWorkingSet);
+
+  t('heavier sets earn strictly more', xpAt(2.5) > xpAt(1.75) ? 1 : 0, 1);
+  t('and more again at elite', xpAt(3.0) > xpAt(2.5) ? 1 : 0, 1);
+  // The whole point of the rebalance: load must dominate volume.
+  t('one elite set beats four beginner sets', xpAt(3.0) > 4 * xpAt(0.75) ? 1 : 0, 1);
+  t('elite set is worth 5x+ a beginner set', xpAt(3.0) / xpAt(0.75) >= 5 ? 1 : 0, 1);
+  t('a PR is worth more than any single set', V.rank.XP.perPR > xpAt(3.0) ? 1 : 0, 1);
+
+  // Twenty easy sets vs five heavy ones — the behaviour being discouraged.
+  t('20 easy sets do not out-earn 5 heavy ones',
+    20 * xpAt(0.75) < 5 * xpAt(2.5) ? 1 : 0, 1);
 
   // =====================================================================
   group('Map projection');

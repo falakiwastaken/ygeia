@@ -179,6 +179,9 @@
     wakeTarget: '07:00',
     dailyStudyMinutes: 180,
 
+    // Security. Only takes effect once a passcode is set.
+    autoLockMinutes: 5,
+
     onboarded: false,
   };
 

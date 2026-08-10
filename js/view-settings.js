@@ -436,6 +436,77 @@
         }),
       );
 
+      // ---- Security -----------------------------------------------------------
+      root.appendChild(V.ui.sectionTitle('Security'));
+
+      const passcodeSet = await V.auth.isSet();
+      const cryptoReason = V.auth.unavailableReason();
+
+      if (cryptoReason) {
+        root.appendChild(V.el('div', { className: 'warn-box', text: cryptoReason }));
+      } else {
+        const securityRows = [
+          V.ui.row({
+            title: 'Passcode lock',
+            sub: passcodeSet ? 'On — required to open Ygeia' : 'Off — anyone with your phone can open it',
+            value: passcodeSet ? 'On' : 'Off',
+            onClick: async () => {
+              if (passcodeSet) {
+                const current = await V.lockScreen.confirmExisting('Change passcode');
+                if (current == null) return;
+                await V.lockScreen.setNewPasscode(current);
+                V.toast('Passcode updated');
+              } else {
+                const done = await V.lockScreen.setNewPasscode();
+                if (done) V.toast('Passcode set');
+              }
+              V.app.render();
+            },
+          }),
+        ];
+
+        if (passcodeSet) {
+          securityRows.push(
+            V.ui.row({
+              title: 'Auto-lock',
+              accessory: V.ui.segmented(
+                [{ value: 0, label: 'Never' }, { value: 1, label: '1 min' },
+                 { value: 5, label: '5 min' }, { value: 30, label: '30 min' }],
+                s.autoLockMinutes,
+                async (v) => { await V.store.settings.set({ autoLockMinutes: v }); s.autoLockMinutes = v; V.app.render(); },
+              ),
+            }),
+          );
+          securityRows.push(
+            V.ui.row({
+              title: 'Remove passcode',
+              sub: 'Ygeia will open without one',
+              onClick: async () => {
+                const current = await V.lockScreen.confirmExisting('Remove passcode');
+                if (current == null) return;
+                try {
+                  await V.auth.removePasscode(current);
+                  V.toast('Passcode removed');
+                  V.app.render();
+                } catch (err) { V.toast(err.message); }
+              },
+            }),
+          );
+        }
+
+        root.appendChild(V.ui.list(securityRows));
+        root.appendChild(
+          V.el('div', {
+            className: 'hint',
+            text: 'The passcode is never stored — only a salted PBKDF2 hash, so reading the ' +
+                  'database does not reveal it. It locks the app, but it does NOT encrypt your ' +
+                  'logged data: anyone with developer tools on this device could still read it. ' +
+                  'There is no account and no recovery, so if you forget it you will need to ' +
+                  'erase and restore from a backup.',
+          }),
+        );
+      }
+
       // ---- How it's calculated ----------------------------------------------
       root.appendChild(V.ui.sectionTitle('How it’s calculated'));
       root.appendChild(

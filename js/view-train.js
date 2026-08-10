@@ -308,13 +308,44 @@
 
       // ---- XP ---------------------------------------------------------------
       body.appendChild(V.ui.sectionTitle('How XP is earned'));
+
+      const bw = ev.bodyweightKg || settings.weightKg;
+      // Worked examples at the standard thresholds, so the load weighting is concrete
+      // rather than a claim.
+      const sample = (label, exId, mult) => {
+        const oneRM = mult * bw * (settings.sex === 'female' ? 0.72 : 1);
+        const xp = V.rank.setXp({ completed: true, type: 'working', weightKg: oneRM * 0.85, reps: 4 }, exId, bw, settings.sex);
+        return V.ui.row({ title: label, sub: `${V.fmt(mult, 2)}× bodyweight squat`, value: '+' + V.fmt(xp, 1) });
+      };
+
       body.appendChild(
         V.ui.list([
           V.ui.row({ title: 'Finishing a workout', value: '+' + V.rank.XP.perSession }),
-          V.ui.row({ title: 'Each working set', value: '+' + V.rank.XP.perWorkingSet }),
+          V.ui.row({ title: 'Any completed set', sub: 'Flat rate, regardless of load', value: '+' + V.rank.XP.perWorkingSet }),
           V.ui.row({ title: 'Setting a PR', value: '+' + V.rank.XP.perPR }),
           V.ui.row({ title: 'A sport session', value: '+' + V.rank.XP.perSportSession }),
         ]),
+      );
+
+      body.appendChild(V.ui.sectionTitle('What a heavy set is worth'));
+      body.appendChild(
+        V.ui.list([
+          sample('Beginner load', 'ex-back-squat', 0.75),
+          sample('Novice load', 'ex-back-squat', 1.25),
+          sample('Intermediate load', 'ex-back-squat', 1.75),
+          sample('Advanced load', 'ex-back-squat', 2.5),
+          sample('Elite load', 'ex-back-squat', 3.0),
+        ]),
+      );
+
+      body.appendChild(
+        V.el('div', {
+          className: 'hint',
+          text: 'Most of a set’s XP comes from how heavy it was relative to the standards ' +
+                'for your bodyweight, not from the fact you did it. Twenty easy sets will ' +
+                'not out-earn five hard ones, and accessory lifts with no strength standard ' +
+                '(curls, calf raises) only pay the flat rate.',
+        }),
       );
 
       body.appendChild(
@@ -322,9 +353,8 @@
           className: 'hint',
           text: 'Rating measures strength against published standards for your bodyweight' +
                 (settings.sex === 'female' ? ' and sex' : '') +
-                '. It moves slowly, because real strength does. XP moves every session, so ' +
-                'showing up is rewarded even when the bar is not going up yet. Both are ' +
-                'computed on your device from your own logs — nothing is compared to other users.',
+                '. It moves slowly, because real strength does. Both are computed on your ' +
+                'device from your own logs — nothing is compared to other users.',
         }),
       );
     });
