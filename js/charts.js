@@ -1,5 +1,5 @@
-/*
- * Vitals — hand-rolled SVG charts.
+﻿/*
+ * Ygeia — hand-rolled SVG charts.
  *
  * No charting library. These render a fixed viewBox scaled by CSS, so they stay crisp at
  * any width and cost nothing to load.

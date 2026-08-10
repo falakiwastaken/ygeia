@@ -1,5 +1,5 @@
-/*
- * Vitals — weight cutting for combat sports.
+﻿/*
+ * Ygeia — weight cutting for combat sports.
  *
  * ---------------------------------------------------------------------------
  * READ THIS BEFORE CHANGING ANYTHING IN HERE.

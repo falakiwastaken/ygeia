@@ -1,5 +1,5 @@
-/*
- * Vitals — persistence.
+﻿/*
+ * Ygeia — persistence.
  *
  * IndexedDB, wrapped in promises. No ORM, no dependencies.
  *
@@ -12,10 +12,13 @@
 (function (V) {
   'use strict';
 
-  const DB_NAME = 'vitals';
+  // Lowercase, and separate from the display name on purpose: renaming this orphans every
+  // existing user's data. If it ever must change, migrate rather than rename.
+  const DB_NAME = 'ygeia';
   // v2 added lifestyle tracking: sports, sleep, study, weight cuts and saved places.
-  // The upgrade only creates new stores, so existing data survives untouched.
-  const DB_VERSION = 2;
+  // v3 added check-ins, accountability habits, meal plans and training programs.
+  // Upgrades only ever create new stores, so existing data survives untouched.
+  const DB_VERSION = 3;
 
   /** store name -> { keyPath, indexes: [[name, keyPath, opts]] } */
   const SCHEMA = {
@@ -37,6 +40,14 @@
     reviewItems:   { keyPath: 'id', indexes: [['subjectId', 'subjectId'], ['dueDate', 'dueDate']] },
     cutPlans:      { keyPath: 'id', indexes: [] },
     places:        { keyPath: 'id', indexes: [] },
+
+    // --- v3 ---
+    // checkIns is keyed by date: there is exactly one per day, so the date IS the identity.
+    checkIns:   { keyPath: 'date', indexes: [] },
+    habits:     { keyPath: 'id', indexes: [] },
+    habitLogs:  { keyPath: 'id', indexes: [['date', 'date'], ['habitId', 'habitId']] },
+    mealPlans:  { keyPath: 'id', indexes: [['date', 'date']] },
+    programRun: { keyPath: 'id', indexes: [] },
   };
 
   let dbPromise = null;
@@ -62,7 +73,7 @@
 
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
-      req.onblocked = () => reject(new Error('Database blocked — close other Vitals tabs and reload.'));
+      req.onblocked = () => reject(new Error('Database blocked — close other Ygeia tabs and reload.'));
     });
     return dbPromise;
   }
@@ -435,9 +446,86 @@
     remove: (id) => db.remove('places', id),
   };
 
+  // ------------------------------------------------------------- check-ins --
+
+  const checkIns = {
+    all: () => db.all('checkIns'),
+    get: (date) => db.get('checkIns', date),
+    save: (c) => db.put('checkIns', c),
+    remove: (date) => db.remove('checkIns', date),
+
+    /** Merge a partial answer set into the day's check-in, creating it if needed. */
+    async patch(date, part, answers) {
+      const existing = (await db.get('checkIns', date)) || { date };
+      existing[part] = Object.assign({}, existing[part], answers);
+      existing[part + 'At'] = Date.now();
+      await db.put('checkIns', existing);
+      return existing;
+    },
+
+    async recent(days) {
+      const all = await db.all('checkIns');
+      const since = V.addDays(V.today(), -((days || 30) - 1));
+      return all.filter((c) => c.date >= since).sort((a, b) => (a.date < b.date ? -1 : 1));
+    },
+  };
+
+  // ---------------------------------------------------------------- habits --
+
+  const habits = {
+    all: () => db.all('habits'),
+    save: (h) => db.put('habits', h),
+
+    async remove(id) {
+      for (const l of await db.byIndex('habitLogs', 'habitId', id)) await db.remove('habitLogs', l.id);
+      return db.remove('habits', id);
+    },
+
+    logs: () => db.all('habitLogs'),
+    logsByDate: (date) => db.byIndex('habitLogs', 'date', date),
+
+    /**
+     * Set a habit's state for a day. The id is derived from habit+date so toggling twice
+     * updates one record rather than accumulating duplicates.
+     */
+    async setDone(habitId, date, done) {
+      const id = habitId + '|' + date;
+      await db.put('habitLogs', { id, habitId, date, done, at: Date.now() });
+      return id;
+    },
+  };
+
+  // ------------------------------------------------------------ meal plans --
+
+  const mealPlans = {
+    all: () => db.all('mealPlans'),
+    byDate: (date) => db.byIndex('mealPlans', 'date', date),
+    save: (p) => db.put('mealPlans', p),
+    remove: (id) => db.remove('mealPlans', id),
+
+    async range(startDate, endDate) {
+      return db.byIndex('mealPlans', 'date', IDBKeyRange.bound(startDate, endDate));
+    },
+  };
+
+  // --------------------------------------------------------------- program --
+
+  const programs = {
+    all: () => db.all('programRun'),
+    save: (p) => db.put('programRun', p),
+    remove: (id) => db.remove('programRun', id),
+
+    /** The single active program run, if any. */
+    async active() {
+      const all = await db.all('programRun');
+      return all.find((p) => p.active) || null;
+    },
+  };
+
   V.store = {
     db, settings, foods, foodLog, exercises, workouts, sets, templates, metrics,
     sports, sleep, study, cuts, places,
+    checkIns, habits, mealPlans, programs,
     open, SCHEMA,
   };
 })(window.V);

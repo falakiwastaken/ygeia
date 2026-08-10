@@ -1,5 +1,5 @@
-/*
- * Vitals — strength rating and rank progression.
+﻿/*
+ * Ygeia — strength rating and rank progression.
  *
  * A chess-style rating for lifting. Unlike Elo, this is not zero-sum against opponents —
  * you are rated against published strength standards for your bodyweight and sex, so the

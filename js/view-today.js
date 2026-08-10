@@ -1,4 +1,4 @@
-/* Vitals — Today: the day at a glance. */
+﻿/* Ygeia — Today: the day at a glance. */
 (function (V) {
   'use strict';
 
@@ -21,12 +21,17 @@
       const scored = V.domain.nutritionScore(entries, targets, settings);
       const root = V.el('div');
 
+      // ---- Check-in and accountability ------------------------------------
+      root.appendChild(await V.planView.buildCheckInCard(state));
+      root.appendChild(await V.planView.buildHabitsCard(state));
+
       // ---- Calorie ring + macros ------------------------------------------
       const kcal = totals.kcal || 0;
       const remaining = targets.kcal - kcal;
 
       root.appendChild(
         V.ui.card({
+          action: V.explain.button(async () => V.explain.calorieTarget(settings)),
           children: [
             V.el('div', { className: 'rings-row' }, [
               V.ui.ring({
@@ -55,11 +60,10 @@
           V.ui.card({
             title: 'Nutrition quality',
             sub: band.label,
-            action: V.el('div', {
-              className: 'stat-value',
-              style: { color: band.color },
-              text: String(scored.score),
-            }),
+            action: V.el('div', { style: { display: 'flex', alignItems: 'center', gap: '4px' } }, [
+              V.el('div', { className: 'stat-value', style: { color: band.color }, text: String(scored.score) }),
+              V.explain.button(async () => V.explain.nutritionScore(scored)),
+            ]),
             children: [
               V.el('div', {},
                 scored.components
@@ -207,6 +211,25 @@
           }),
         );
       }
+
+      // ---- Insights ---------------------------------------------------------
+      root.appendChild(V.ui.sectionTitle('Analysis'));
+      root.appendChild(
+        V.ui.list([
+          V.ui.row({
+            title: 'Insights',
+            sub: 'Correlations across everything you log',
+            value: '›',
+            onClick: () => V.planView.openInsightsSheet(),
+          }),
+          V.ui.row({
+            title: 'Meal ideas & shopping list',
+            sub: 'Bulk-store meals that fit your remaining macros',
+            value: '›',
+            onClick: () => V.planView.openMealPlannerSheet(),
+          }),
+        ]),
+      );
 
       return root;
     },

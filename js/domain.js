@@ -1,5 +1,5 @@
-/*
- * Vitals — domain logic.
+﻿/*
+ * Ygeia — domain logic.
  *
  * Pure functions only: no DOM, no storage, no network. Everything here is deterministic
  * and directly testable, which matters because these are the numbers the user makes

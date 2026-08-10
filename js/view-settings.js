@@ -1,4 +1,4 @@
-/* Vitals — Settings: profile, targets, data import/export. */
+﻿/* Ygeia — Settings: profile, targets, data import/export. */
 (function (V) {
   'use strict';
 
@@ -211,12 +211,12 @@
 
   async function exportBackup() {
     const stores = ['foods', 'foodLogs', 'recipes', 'exercises', 'templates', 'workouts', 'sets', 'metrics', 'kv'];
-    const data = { format: 'vitals-backup', version: 1, exportedAt: new Date().toISOString(), stores: {} };
+    const data = { format: 'ygeia-backup', version: 1, exportedAt: new Date().toISOString(), stores: {} };
     for (const s of stores) data.stores[s] = await V.store.db.all(s);
 
     const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    const a = V.el('a', { href: url, download: `vitals-backup-${V.today()}.json` });
+    const a = V.el('a', { href: url, download: `ygeia-backup-${V.today()}.json` });
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -243,7 +243,10 @@
         if (!file) return;
         try {
           const data = JSON.parse(await file.text());
-          if (data.format !== 'vitals-backup') throw new Error('That is not a Vitals backup file.');
+          // 'vitals-backup' was the tag before the app was renamed — still accepted so
+          // early backups keep restoring.
+          const ACCEPTED = ['ygeia-backup', 'Ygeia-backup', 'vitals-backup'];
+          if (!ACCEPTED.includes(data.format)) throw new Error('That is not a Ygeia backup file.');
           if (!V.confirm('Replace all current data with this backup?')) return;
 
           for (const name in data.stores) {
@@ -433,6 +436,75 @@
         }),
       );
 
+      // ---- How it's calculated ----------------------------------------------
+      root.appendChild(V.ui.sectionTitle('How it’s calculated'));
+      root.appendChild(
+        V.ui.list([
+          V.ui.row({
+            title: 'Calorie target',
+            sub: 'Mifflin-St Jeor → TDEE → goal',
+            value: '›',
+            onClick: async () => V.explain.open(V.explain.calorieTarget(await V.store.settings.get())),
+          }),
+          V.ui.row({
+            title: 'Macro targets',
+            sub: 'Protein per kg, fat floor, carbs as remainder',
+            value: '›',
+            onClick: async () => V.explain.open(V.explain.macroTargets(await V.store.settings.get())),
+          }),
+          V.ui.row({
+            title: 'Nutrition score',
+            sub: 'Weighted components, renormalised',
+            value: '›',
+            onClick: async () => {
+              const st = await V.store.settings.get();
+              const entries = await V.store.foodLog.resolved(V.app.state.date);
+              const scored = V.domain.nutritionScore(entries, V.domain.macroTargets(st), st);
+              V.explain.open(V.explain.nutritionScore(scored));
+            },
+          }),
+          V.ui.row({
+            title: 'Estimated 1RM',
+            sub: 'Blended Brzycki / Epley',
+            value: '›',
+            onClick: () => V.explain.open(V.explain.oneRepMax(100, 5)),
+          }),
+          V.ui.row({
+            title: 'BMI and FFMI',
+            sub: 'Including why BMI misreads lifters',
+            value: '›',
+            onClick: async () => {
+              const st = await V.store.settings.get();
+              const bf = await V.store.metrics.latest('body_fat_pct');
+              V.explain.open(V.explain.bmi(st.weightKg, st.heightCm, bf ? bf.value : null, st.sex));
+            },
+          }),
+          V.ui.row({
+            title: 'Weight cut split',
+            sub: 'Gradual vs acute, and the safety limits',
+            value: '›',
+            onClick: async () => {
+              const st = await V.store.settings.get();
+              const plan = V.cut.plan({
+                currentKg: st.weightKg,
+                targetKg: st.weightKg - 3,
+                weighInAt: Date.now() + 7 * 86400000,
+                sex: st.sex,
+              });
+              V.explain.open(V.explain.weightCut(plan, st.weightUnit));
+            },
+          }),
+        ]),
+      );
+      root.appendChild(
+        V.el('div', {
+          className: 'hint',
+          text: 'Every derived number can show its working — formula, your actual inputs, ' +
+                'each step, and the source. If something looks wrong, the same screen has a ' +
+                'button that opens a pre-filled bug report.',
+        }),
+      );
+
       // ---- Privacy ----------------------------------------------------------
       root.appendChild(V.ui.sectionTitle('Privacy'));
       root.appendChild(
@@ -465,7 +537,7 @@
         V.el('div', {
           className: 'hint',
           style: { textAlign: 'center', marginTop: '24px' },
-          text: 'Vitals · free and open source · MIT licence',
+          text: 'Ygeia · free and open source · MIT licence',
         }),
       );
 

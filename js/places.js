@@ -1,5 +1,5 @@
-/*
- * Vitals — nearby places.
+﻿/*
+ * Ygeia — nearby places.
  *
  * Data comes from OpenStreetMap via the Overpass API: free, no key, no account, and
  * CORS-enabled so it works straight from the browser.
@@ -287,7 +287,7 @@
       body.appendChild(
         V.el('div', {
           className: 'hint',
-          text: 'No free API exposes restaurant menus, so Vitals cannot import dishes ' +
+          text: 'No free API exposes restaurant menus, so Ygeia cannot import dishes ' +
                 'automatically. Open the website to see what they serve.',
         }),
       );

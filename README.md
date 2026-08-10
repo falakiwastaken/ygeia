@@ -1,4 +1,4 @@
-# Vitals
+﻿# Ygeia
 
 A free, open-source, offline-first lifestyle tracker. Nutrition, lifting, sport, sleep,
 study and body composition in one app — a free alternative to closed-source trackers.
@@ -8,7 +8,7 @@ Everything is stored in your browser's local database.
 
 Soft parchment-and-sage theme by default, with a forest-night dark mode.
 
-<!-- Add a screenshot here once deployed: ![Vitals](docs/screenshot.png) -->
+<!-- Add a screenshot here once deployed: ![Ygeia](docs/screenshot.png) -->
 
 ## What it does
 
@@ -74,6 +74,44 @@ Soft parchment-and-sage theme by default, with a forest-night dark mode.
 - Nearby restaurants, cafés, libraries, gyms and supermarkets from OpenStreetMap
 - A hand-rolled slippy map (no Leaflet), cuisine, opening hours and website links
 
+**Check-ins & accountability**
+- Morning and evening check-ins that take about twenty seconds
+- A readiness score from energy, soreness, mood and motivation, with advice that actually
+  changes what you do ("drop the intensity, hit your reps, skip the grinders")
+- Daily habits tracked yes/no — deliberately binary, because partial credit turns a
+  commitment into a negotiation
+
+**Meal planning**
+- 20 bulk-store meals built around what warehouse stores actually sell: rotisserie chicken,
+  frozen veg, rice, eggs, tinned fish, mince
+- Filter by prep time, batch cooking, no-cook, vegetarian, cheap
+- Suggestions ranked against your *remaining* macros for the day
+- Automatic shopping list — quantities summed across planned servings and rounded up to
+  something you can actually buy
+- Macros are computed from the food library, never typed in, so they stay consistent
+
+**Training programs**
+- Six programs: Full Body 3×, Upper/Lower 4×, PPL 6×, Barbell Strength 3×, Bodyweight 4×,
+  Fighter Strength 4×
+- Sessions rotate rather than being pinned to weekdays, so missing a Tuesday shifts the
+  plan along instead of skipping legs
+- Starting weights come from your own history via the existing progression logic
+
+**Insights**
+- Correlations across everything you log, with a scatter plot and r, n and p shown next to
+  every claim
+- Only a **curated list** of questions with a plausible mechanism is tested. Testing all 66
+  pairs of a dozen variables would manufacture "findings" from pure noise, and this refuses
+  to do that
+- Nothing is reported below 10 paired days or |r| < 0.45
+- A custom explorer for any two variables at same-day, next-day or two-day lag
+
+**Every number shows its working**
+- Tap ⓘ on any derived value for the formula, your actual inputs, each arithmetic step, the
+  result, and the source it came from
+- Each explanation has a "report a problem" button that opens a pre-filled GitHub issue
+  containing the full working — so bug reports arrive reproducible
+
 **Data**
 - Import your Apple Health export (see below)
 - Full JSON backup and restore
@@ -116,7 +154,7 @@ What it *can* read is the export file:
 1. Health app → your profile picture → **Export All Health Data**
 2. Save the `.zip` to Files (this takes a few minutes and can be 200 MB–1 GB)
 3. In Files, tap the zip once to uncompress it
-4. In Vitals: Settings → **Import from Apple Health** → choose `apple_health_export/export.xml`
+4. In Ygeia: Settings → **Import from Apple Health** → choose `apple_health_export/export.xml`
 
 Steps, weight, body fat, lean mass, resting HR, HRV, blood pressure and VO₂ max are
 imported. The file is streamed and aggregated to daily values on-device — it is never
@@ -132,14 +170,14 @@ Worth stating plainly, because other projects tend not to:
   native iOS app with the HealthKit entitlement, which needs a Mac and a $99/yr Apple
   Developer account.
 - **No Apple Watch support.** The Watch does not expose its sensors to third parties over
-  Bluetooth — it pairs only with the iPhone. Watch data reaches Vitals via the Health export.
+  Bluetooth — it pairs only with the iPhone. Watch data reaches Ygeia via the Health export.
 - **No Bluetooth heart-rate straps on iPhone.** Safari has never supported Web Bluetooth
   on any iOS version.
 - **No barcode *scanning* on iOS.** Safari lacks the `BarcodeDetector` API, so barcodes are
   typed in rather than scanned. Lookup itself works fine.
 - **No restaurant menus.** There is no free API that returns them — Google Places and Yelp
   both require paid keys and neither exposes structured dish data, and OpenStreetMap carries
-  a website link at best. Vitals shows what genuinely exists and lets you log what you ate;
+  a website link at best. Ygeia shows what genuinely exists and lets you log what you ate;
   it does not pretend to know the menu.
 - **Exercise calories are not added to your food budget.** Your target already includes your
   activity level, so eating back workout calories double-counts them. That is the single most

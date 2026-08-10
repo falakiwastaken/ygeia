@@ -1,5 +1,5 @@
-/*
- * Vitals — Apple Health export importer.
+﻿/*
+ * Ygeia — Apple Health export importer.
  *
  * There is no browser API for HealthKit; a web app cannot read Apple Health directly.
  * What it CAN do is read the export the Health app produces:

@@ -1,5 +1,5 @@
-/*
- * Vitals — bundled exercise library.
+﻿/*
+ * Ygeia — bundled exercise library.
  *
  * ~130 movements covering the common barbell/dumbbell/machine/bodyweight vocabulary.
  * Users can add their own; these exist so a first workout can be logged immediately.

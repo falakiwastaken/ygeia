@@ -1,5 +1,5 @@
-/*
- * Vitals — body composition indices and sport energy expenditure.
+﻿/*
+ * Ygeia — body composition indices and sport energy expenditure.
  *
  * Pure functions. No DOM, no storage.
  */

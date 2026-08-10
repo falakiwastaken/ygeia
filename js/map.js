@@ -1,5 +1,5 @@
-/*
- * Vitals — minimal slippy map.
+﻿/*
+ * Ygeia — minimal slippy map.
  *
  * Renders OpenStreetMap raster tiles with drag-to-pan and zoom, in about 150 lines.
  * Leaflet would do this too, but pulling in a library would break the app's one hard

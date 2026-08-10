@@ -1,5 +1,5 @@
-/*
- * Vitals — bootstrap and router.
+﻿/*
+ * Ygeia — bootstrap and router.
  *
  * Loaded last. Seeds the library on first run, wires navigation, and re-renders the
  * active view on demand. Views are plain objects with a render(container) method.
@@ -30,7 +30,7 @@
       container.innerHTML = '';
       container.appendChild(content);
     } catch (err) {
-      console.error('[vitals] render failed:', err);
+      console.error('[Ygeia] render failed:', err);
       container.innerHTML = '';
       container.appendChild(
         V.el('div', { className: 'card' }, [
@@ -146,7 +146,7 @@
     } catch (err) {
       document.body.innerHTML =
         '<div style="padding:32px;font-family:system-ui;color:#E8EDF2;background:#0B0D10;min-height:100vh">' +
-        '<h2>Storage unavailable</h2><p>Vitals needs IndexedDB to store your data. ' +
+        '<h2>Storage unavailable</h2><p>Ygeia needs IndexedDB to store your data. ' +
         'This usually means private browsing is on, or the browser is blocking site data.</p>' +
         '<p style="color:#8A94A3">' + V.esc(err.message) + '</p></div>';
       return;

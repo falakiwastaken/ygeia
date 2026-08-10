@@ -1,9 +1,9 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Vitals — domain tests</title>
+<title>Ygeia — domain tests</title>
 <style>
   body { font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
          background:#0B0D10; color:#E8EDF2; margin:0; padding:24px; }
@@ -23,7 +23,7 @@
 </style>
 </head>
 <body>
-<h1>Vitals — domain tests</h1>
+<h1>Ygeia — domain tests</h1>
 <div class="sub">
   Pure-function tests for <code>js/domain.js</code>. No test runner, no dependencies —
   open this file in a browser. Reference values are computed by hand from the published
@@ -37,7 +37,13 @@
 <script src="js/domain-cut.js"></script>
 <script src="js/domain-study.js"></script>
 <script src="js/domain-rank.js"></script>
+<script src="js/domain-plan.js"></script>
+<script src="js/domain-insights.js"></script>
 <script src="js/map.js"></script>
+<script src="js/data-foods.js"></script>
+<script src="js/data-exercises.js"></script>
+<script src="js/data-meals.js"></script>
+<script src="js/data-programs.js"></script>
 <script>
 (function () {
   'use strict';
@@ -353,6 +359,128 @@
   t('project/unproject round-trips (lon)', V.map.unproject(V.map.project(51.5, -0.12, 15).x, V.map.project(51.5, -0.12, 15).y, 15).lon, -0.12, 0.0001);
   t('London to Paris is ~344 km', V.map.distance(51.5074, -0.1278, 48.8566, 2.3522) / 1000, 344, 2);
   t('a point is zero distance from itself', V.map.distance(51.5, -0.12, 51.5, -0.12), 0);
+
+  // =====================================================================
+  group('Content integrity');
+  // Every id referenced by a meal or program must exist in the seed libraries.
+  // A typo here silently breaks a feature at runtime — exactly how 'ex-farmers-walk'
+  // (the real slug is 'ex-farmer-s-walk') got shipped once.
+  const seedFoodIds = new Set(V.seedFoods().map((f) => f.id));
+  const seedExIds = new Set(V.seedExercises().map((e) => e.id));
+
+  const badIngredients = [];
+  for (const m of V.MEALS) {
+    for (const ing of m.ingredients) {
+      if (!seedFoodIds.has(ing.foodId)) badIngredients.push(m.name + ' → ' + ing.foodId);
+    }
+  }
+  t('every meal ingredient resolves', badIngredients.length, 0);
+  if (badIngredients.length) {
+    out.appendChild(Object.assign(document.createElement('div'),
+      { className: 'case fail', textContent: badIngredients.join(' | ') }));
+  }
+
+  const badExercises = [];
+  for (const p of V.PROGRAMS) {
+    for (const d of p.days) {
+      for (const s of d.exercises) {
+        if (!seedExIds.has(s.exerciseId)) badExercises.push(p.name + '/' + d.name + ' → ' + s.exerciseId);
+      }
+    }
+  }
+  t('every program exercise resolves', badExercises.length, 0);
+  if (badExercises.length) {
+    out.appendChild(Object.assign(document.createElement('div'),
+      { className: 'case fail', textContent: badExercises.join(' | ') }));
+  }
+
+  t('no duplicate food ids', seedFoodIds.size, V.seedFoods().length);
+  t('no duplicate exercise ids', seedExIds.size, V.seedExercises().length);
+  t('every meal has at least one step', V.MEALS.every((m) => m.steps.length > 0) ? 1 : 0, 1);
+  t('every program has days', V.PROGRAMS.every((p) => p.days.length > 0) ? 1 : 0, 1);
+  t('rep ranges are sane',
+    V.PROGRAMS.every((p) => p.days.every((d) => d.exercises.every((e) => e.repMin <= e.repMax))) ? 1 : 0, 1);
+
+  // =====================================================================
+  group('Check-in and habits');
+  // energy 4, soreness 2 (inverse -> 4), mood 4, motivation 5 => mean 4.25 => 81
+  t('readiness from morning answers',
+    V.plan.readiness({ morning: { energy: 4, soreness: 2, mood: 4, motivation: 5 } }), 81);
+  t('soreness is inverted (5 = worst)',
+    V.plan.readiness({ morning: { soreness: 5 } }), 0);
+  t('no morning check-in = no readiness',
+    V.plan.readiness({ evening: { focus: 3 } }) === null ? 1 : 0, 1);
+  t('all top marks = 100',
+    V.plan.readiness({ morning: { energy: 5, soreness: 1, mood: 5, motivation: 5 } }), 100);
+
+  // =====================================================================
+  group('Meal planning');
+  const foodMap = {};
+  for (const f of V.seedFoods()) foodMap[f.id] = f;
+  const testMeal = V.MEALS.find((m) => m.id === 'meal-chicken-rice-broccoli');
+  const mealNut = V.plan.mealNutrients(testMeal, foodMap);
+  // 170g cooked chicken (165 kcal/100g) = 280.5, plus rice/broccoli/oil
+  t('meal nutrients are computed, not hard-coded', mealNut.kcal > 400 && mealNut.kcal < 900 ? 1 : 0, 1);
+  t('meal protein is substantial', mealNut.protein > 50 ? 1 : 0, 1);
+
+  const shopping = V.plan.shoppingList([{ meal: testMeal, servings: 4 }], foodMap);
+  t('shopping list has one row per ingredient', shopping.length, testMeal.ingredients.length);
+  // 170 g x 4 servings = 680 g, rounded up to the next 50 g.
+  // Compared as a string, so it goes through a boolean rather than the numeric helper.
+  t('quantities round up to buyable amounts',
+    shopping.find((i) => /Chicken breast, cooked/.test(i.name)).display === '700 g' ? 1 : 0, 1);
+  t('duplicate ingredients across meals are merged',
+    V.plan.shoppingList([{ meal: testMeal, servings: 1 }, { meal: testMeal, servings: 1 }], foodMap).length,
+    testMeal.ingredients.length);
+  t('time filter excludes slow meals',
+    V.plan.filterMeals(V.MEALS, { maxMinutes: 10 }).every((m) => m.timeMin <= 10) ? 1 : 0, 1);
+
+  // =====================================================================
+  group('Insights statistics');
+  const perfect = [];
+  const doubled = [];
+  for (let i = 0; i < 12; i++) {
+    const d = V.addDays('2026-01-01', i);
+    perfect.push({ date: d, value: i });
+    doubled.push({ date: d, value: i * 2 });
+  }
+  t('perfect positive correlation', V.insights.correlate(perfect, doubled, 0).r, 1);
+
+  const inverted = perfect.map((p) => ({ date: p.date, value: -p.value }));
+  t('perfect negative correlation', V.insights.correlate(perfect, inverted, 0).r, -1);
+
+  t('constant series has no correlation',
+    V.insights.correlate(perfect, perfect.map((p) => ({ date: p.date, value: 5 })), 0) === null ? 1 : 0, 1);
+
+  t('12 paired days is reportable', V.insights.correlate(perfect, doubled, 0).reportable ? 1 : 0, 1);
+  t('5 paired days is NOT reportable',
+    V.insights.correlate(perfect.slice(0, 5), doubled.slice(0, 5), 0).reportable ? 1 : 0, 0);
+
+  // Lag 1 shifts series A forward a day, so a same-day-only relationship weakens.
+  t('lag shifts the alignment',
+    V.insights.align(perfect, doubled, 1).length, 11);
+  t('lag 0 aligns every day', V.insights.align(perfect, doubled, 0).length, 12);
+
+  t('strength labels: 0.8 is strong', V.insights.strength(0.8) === 'strong' ? 1 : 0, 1);
+  t('strength labels: 0.2 is negligible', V.insights.strength(0.2) === 'negligible' ? 1 : 0, 1);
+  t('p-value shrinks as r grows',
+    V.insights.pValue(0.9, 20) < V.insights.pValue(0.3, 20) ? 1 : 0, 1);
+  t('only curated questions are tested', V.insights.QUESTIONS.length < 20 ? 1 : 0, 1);
+
+  // =====================================================================
+  group('Program sessions');
+  const exMap = {};
+  for (const e of V.seedExercises()) exMap[e.id] = e;
+  const prog = V.PROGRAMS[0];
+  t('rotation starts at day 0', V.plan.nextSession(prog, 0).index, 0);
+  t('rotation wraps around', V.plan.nextSession(prog, prog.days.length).index, 0);
+  t('rotation advances', V.plan.nextSession(prog, 1).index, 1);
+  const session = V.plan.buildSession(prog.days[0], {}, exMap);
+  t('session builds every slot', session.length, prog.days[0].exercises.length);
+  t('every slot resolves an exercise', session.every((s) => s.exercise) ? 1 : 0, 1);
+  t('untrained lifts start at the bottom of the range', session[0].reps, prog.days[0].exercises[0].repMin);
+  t('adherence caps at 100%',
+    V.plan.programAdherence(prog, Date.now() - 7 * 86400000, 99).pct, 100);
 
   // =====================================================================
   const summary = document.createElement('div');

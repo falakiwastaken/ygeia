@@ -1,4 +1,4 @@
-/* Vitals — Train: live workout logging, progression, plate maths. */
+﻿/* Ygeia — Train: live workout logging, progression, plate maths. */
 (function (V) {
   'use strict';
 
@@ -739,6 +739,8 @@
               });
               V.app.render();
             }, 'btn-primary'),
+            V.el('div', { style: { height: '8px' } }),
+            V.ui.button('Follow a program', () => V.planView.openProgramsSheet(), 'btn-ghost'),
             V.el('div', { style: { height: '8px' } }),
             V.ui.button('Plate calculator', () => openPlateCalculator(), 'btn-ghost'),
           ],

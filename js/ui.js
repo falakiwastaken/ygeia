@@ -1,4 +1,4 @@
-/* Vitals — reusable UI pieces. Plain DOM construction, no framework. */
+﻿/* Ygeia — reusable UI pieces. Plain DOM construction, no framework. */
 (function (V) {
   'use strict';
 

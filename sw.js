@@ -1,5 +1,5 @@
-/*
- * Vitals — service worker.
+﻿/*
+ * Ygeia — service worker.
  *
  * Cache-first for the app shell so the app opens instantly and works with no network.
  * Deliberately hand-written: Workbox would add a build step to an app whose entire point
@@ -9,7 +9,7 @@
  */
 
 // Bump this to ship an update — the old cache is dropped on activate.
-const CACHE = 'vitals-v2';
+const CACHE = 'ygeia-v3';
 
 const SHELL = [
   './',
@@ -23,6 +23,11 @@ const SHELL = [
   './js/domain-cut.js',
   './js/domain-study.js',
   './js/domain-rank.js',
+  './js/domain-plan.js',
+  './js/domain-insights.js',
+  './js/data-meals.js',
+  './js/data-programs.js',
+  './js/explain.js',
   './js/data-foods.js',
   './js/data-exercises.js',
   './js/ui.js',
@@ -37,6 +42,7 @@ const SHELL = [
   './js/view-study.js',
   './js/view-body.js',
   './js/view-cut.js',
+  './js/view-plan.js',
   './js/view-settings.js',
   './js/app.js',
   './icons/icon.svg',

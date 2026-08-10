@@ -1,4 +1,4 @@
-/* Vitals — small shared helpers. Loaded first; everything else builds on window.V. */
+﻿/* Ygeia — small shared helpers. Loaded first; everything else builds on window.V. */
 window.V = window.V || {};
 
 (function (V) {

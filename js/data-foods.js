@@ -1,5 +1,5 @@
-/*
- * Vitals — bundled offline food seed.
+﻿/*
+ * Ygeia — bundled offline food seed.
  *
  * ~130 staples so the app is useful the moment it opens, with no network and no account.
  * Open Food Facts covers packaged/branded products; this covers the whole foods that

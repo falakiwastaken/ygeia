@@ -1,4 +1,4 @@
-/* Vitals — Study: sleep, focus sessions, subjects and spaced repetition. */
+﻿/* Ygeia — Study: sleep, focus sessions, subjects and spaced repetition. */
 (function (V) {
   'use strict';
 

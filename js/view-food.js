@@ -1,4 +1,4 @@
-/* Vitals — Food: the day's diary, search, portions, custom foods. */
+﻿/* Ygeia — Food: the day's diary, search, portions, custom foods. */
 (function (V) {
   'use strict';
 
@@ -392,6 +392,8 @@
 
       root.appendChild(V.el('div', { style: { height: '16px' } }));
       root.appendChild(V.ui.button('Add food', () => openSearchSheet(defaultMeal()), 'btn-primary'));
+      root.appendChild(V.el('div', { style: { height: '8px' } }));
+      root.appendChild(V.ui.button('Meal ideas & shopping list', () => V.planView.openMealPlannerSheet(), 'btn-ghost'));
       root.appendChild(V.el('div', { style: { height: '8px' } }));
       root.appendChild(V.ui.button('Find somewhere to eat', () => V.places.openPlacesSheet(), 'btn-ghost'));
 

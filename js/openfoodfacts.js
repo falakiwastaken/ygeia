@@ -1,5 +1,5 @@
-/*
- * Vitals — Open Food Facts client.
+﻿/*
+ * Ygeia — Open Food Facts client.
  *
  * Free, open database of ~3M packaged products. No API key, no account, no rate-limit
  * signup. Chosen over USDA FoodData Central specifically because FDC sends no CORS

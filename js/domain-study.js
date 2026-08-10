@@ -1,5 +1,5 @@
-/*
- * Vitals — sleep and study.
+﻿/*
+ * Ygeia — sleep and study.
  *
  * Pure functions. The two live together because they are genuinely coupled: sleep is
  * when memory consolidates, so a study plan that costs you sleep is usually a bad trade.

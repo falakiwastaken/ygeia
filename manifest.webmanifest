@@ -1,6 +1,6 @@
-{
-  "name": "Vitals — Lifestyle Tracker",
-  "short_name": "Vitals",
+﻿{
+  "name": "Ygeia — Lifestyle Tracker",
+  "short_name": "Ygeia",
   "description": "Free, open-source, offline-first lifestyle tracker. Nutrition, lifting, sport, sleep and study. Your data never leaves your device.",
   "start_url": "./",
   "scope": "./",
