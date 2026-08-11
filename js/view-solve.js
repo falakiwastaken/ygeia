@@ -23,6 +23,8 @@
     V.ui.sheet('Stuck on a problem?', async (body) => {
       const hasKey = await V.aiVision.hasKey();
 
+      // Key entry lives in one place — Settings → AI features — because the same key also
+      // unlocks the cloud coach. Duplicating the form here is how the two drift apart.
       if (!hasKey) {
         body.appendChild(
           V.el('div', { className: 'warn-box' }, [
@@ -35,34 +37,15 @@
             }),
           ]),
         );
-
-        body.appendChild(V.ui.sectionTitle('Getting a key'));
-        body.appendChild(
-          V.ui.list([
-            V.ui.row({ title: '1. Open aistudio.google.com/apikey' }),
-            V.ui.row({ title: '2. Sign in and click "Create API key"' }),
-            V.ui.row({ title: '3. Copy it and paste it below' }),
-          ]),
-        );
-
-        const keyInput = V.ui.input({ type: 'password', placeholder: 'Paste your API key', autocomplete: 'off' });
         body.appendChild(V.el('div', { style: { height: '12px' } }));
-        body.appendChild(V.ui.field('API key', keyInput));
         body.appendChild(
-          V.ui.button('Save key', async () => {
-            if (!keyInput.value.trim()) return V.toast('Paste a key first');
-            await V.aiVision.setKey(keyInput.value.trim());
-            V.toast('Key saved');
-            V.ui.refreshSheet();
-          }, 'btn-primary'),
+          V.ui.button('Add a key', () => { V.ui.closeSheet(); V.aiKeyView.openSheet(); }, 'btn-primary'),
         );
-
         body.appendChild(
           V.el('div', {
             className: 'hint',
-            text: 'The key is stored only in this browser. Note that Google\'s free tier may ' +
-                  'use what you send to improve their models, and human reviewers can see it — ' +
-                  'so photograph the question, not anything private.',
+            text: 'It is free and takes about a minute. The next screen explains where to get ' +
+                  'one and what it unlocks.',
           }),
         );
         return;
@@ -211,41 +194,20 @@
     });
   }
 
-  /** Settings rows for the key and model. */
+  /**
+   * Settings row. The key and model now live under AI features, which owns them for both
+   * this and the cloud coach, so this is just the way in to the feature itself.
+   */
   S.buildSettingsRows = async function () {
     const hasKey = await V.aiVision.hasKey();
-    const settings = await V.store.settings.get();
-
     return [
       V.ui.row({
         title: 'Study photo help',
-        sub: hasKey ? 'Key saved — Gemini' : 'Not set up',
+        sub: hasKey ? 'Ready — photograph a problem for step-by-step working' : 'Needs an API key',
         value: hasKey ? 'On' : 'Off',
         onClick: () => S.openSolveSheet(),
       }),
-      hasKey
-        ? V.ui.row({
-            title: 'Model',
-            accessory: V.ui.segmented(
-              V.aiVision.MODELS.map((m) => ({ value: m.value, label: m.label })),
-              settings.visionModel || V.aiVision.DEFAULT_MODEL,
-              async (v) => { await V.store.settings.set({ visionModel: v }); V.app.render(); },
-            ),
-          })
-        : null,
-      hasKey
-        ? V.ui.row({
-            title: 'Remove API key',
-            sub: 'Photo help stops working',
-            onClick: async () => {
-              if (!V.confirm('Remove the saved API key?')) return;
-              await V.aiVision.clearKey();
-              V.toast('Key removed');
-              V.app.render();
-            },
-          })
-        : null,
-    ].filter(Boolean);
+    ];
   };
 
   S.VERIFY_NOTE = VERIFY_NOTE;

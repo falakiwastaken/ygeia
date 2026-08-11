@@ -693,6 +693,18 @@
         );
       }
 
+      // ---- AI features --------------------------------------------------------
+      root.appendChild(V.ui.sectionTitle('AI features'));
+      root.appendChild(V.ui.list(await V.aiKeyView.buildSettingsRows()));
+      root.appendChild(
+        V.el('div', {
+          className: 'hint',
+          text: 'Everything in Ygeia works without this. Adding a free Google API key unlocks ' +
+                'the cloud coach and study photo help; the on-device coach below needs no key ' +
+                'at all and never sends anything anywhere.',
+        }),
+      );
+
       // ---- On-device coach ----------------------------------------------------
       root.appendChild(V.ui.sectionTitle('On-device coach'));
       const localModel = await V.aiLocal.installedModel();

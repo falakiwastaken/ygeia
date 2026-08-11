@@ -180,9 +180,10 @@
 
     let res;
     try {
-      res = await fetch(`${ENDPOINT}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`, {
+      // Header, not query string. A key in a URL gets written to logs along the way.
+      res = await fetch(`${ENDPOINT}/${encodeURIComponent(model)}:generateContent`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
         body: JSON.stringify(body),
         signal: controller.signal,
       });

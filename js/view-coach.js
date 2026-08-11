@@ -28,7 +28,7 @@
           V.ui.row({
             title: 'Cloud coach',
             sub: !hasKey
-              ? 'Needs the same API key as study photos — add it first'
+              ? 'Needs an API key — add one under AI features in Settings'
               : (cloudOn ? 'On — much better answers, but your data goes to Google' : 'Off'),
             accessory: hasKey
               ? V.ui.segmented(
@@ -50,7 +50,7 @@
                   },
                 )
               : null,
-            onClick: hasKey ? null : () => { V.ui.closeSheet(); V.solveView.openSolveSheet(); },
+            onClick: hasKey ? null : () => { V.ui.closeSheet(); V.aiKeyView.openSheet(); },
           }),
         ]),
       );

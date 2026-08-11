@@ -11,8 +11,9 @@
  * in writing. So the cloud coach lives here instead, clearly labelled, and the wall over
  * there stays intact.
  *
- * What gets sent: a short summary — calorie target, what was eaten, sleep hours, weight
- * trend, upcoming notes. Not your full history, but unambiguously personal health data.
+ * What gets sent: a short summary — calorie and protein totals, food quality score, weight
+ * trend, workout count, the gaps Ygeia calculated (which include sleep), and the next few
+ * calendar notes. Not your full history, but unambiguously personal health data.
  *
  * It is off unless the user turns it on, the UI says plainly where the data goes, and
  * Google's free tier may use submitted content for training with human reviewers able to
@@ -46,6 +47,62 @@
   C.SYSTEM_PROMPT = V.COACH_PROMPT;
 
   /**
+   * Check a key works, and find out which models it can actually reach.
+   *
+   * Sends the key and nothing else — no health data, no photo. Worth doing at the moment
+   * the user pastes it: a key that turns out to be wrong otherwise fails later, inside a
+   * feature, looking like the feature is broken.
+   *
+   * Asking Google which models the key can reach also stops the app offering one the user
+   * cannot use. Google moves the free tier around — 2.0 Flash was withdrawn in June 2026
+   * and the Pro models left the free tier that April — so a hardcoded list goes stale.
+   *
+   * @returns {Promise<string[]>} model ids usable for generateContent, newest-looking first
+   */
+  C.verifyKey = async function (key) {
+    const clean = String(key || '').trim();
+    if (!clean) throw new Error('Paste a key first.');
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20000);
+
+    let res;
+    try {
+      res = await fetch(ENDPOINT + '?pageSize=200', {
+        headers: { 'x-goog-api-key': clean },
+        signal: controller.signal,
+      });
+    } catch (err) {
+      throw new Error(err.name === 'AbortError'
+        ? 'Google did not respond. Check your connection.'
+        : 'Could not reach Google. Check your connection.');
+    } finally {
+      clearTimeout(timer);
+    }
+
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      if (res.status === 400 || res.status === 401 || res.status === 403) {
+        throw new Error('Google rejected that key. Check you copied all of it.');
+      }
+      if (res.status === 429) throw new Error('Rate limited by Google. Wait a minute and retry.');
+      const message = data && data.error && data.error.message;
+      throw new Error(message || `Google returned ${res.status}.`);
+    }
+
+    const usable = ((data && data.models) || [])
+      .filter((m) => (m.supportedGenerationMethods || []).includes('generateContent'))
+      .map((m) => String(m.name || '').replace(/^models\//, ''))
+      .filter((id) => id && !/embedding|aqa|imagen|veo/i.test(id));
+
+    if (!usable.length) throw new Error('That key works but cannot reach any chat models.');
+
+    // Newer generations sort first so the picker's default is a current model. Plain
+    // descending string order does this correctly for gemini-N.M names.
+    return usable.sort((a, b) => b.localeCompare(a, 'en', { numeric: true }));
+  };
+
+  /**
    * Ask the cloud coach.
    *
    * @param {Array}  messages [{role:'user'|'assistant', content}]
@@ -74,9 +131,11 @@
 
     let res;
     try {
-      res = await fetch(`${ENDPOINT}/${encodeURIComponent(chosen)}:generateContent?key=${encodeURIComponent(key)}`, {
+      // The key goes in a header, never the query string — URLs end up in proxy and
+      // browser logs, and a credential should not be sitting in one.
+      res = await fetch(`${ENDPOINT}/${encodeURIComponent(chosen)}:generateContent`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: C.SYSTEM_PROMPT }] },
           contents,
