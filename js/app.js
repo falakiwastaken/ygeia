@@ -182,6 +182,10 @@
     wireChrome();
     app.go('today');
 
+    // First run: ask for the body the calculations need. Every step is skippable, and it
+    // renders over a working app rather than blocking it.
+    if (await V.onboard.shouldShow()) V.onboard.open();
+
     // Service workers require http(s); opened from file:// this is simply skipped.
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
       navigator.serviceWorker.register('sw.js').catch(() => {

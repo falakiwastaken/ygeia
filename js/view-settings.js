@@ -296,6 +296,61 @@
     });
   }
 
+  /**
+   * The single privacy statement.
+   *
+   * This is the ONE place the app explains what it stores and what it sends. Do not
+   * scatter restatements across other screens — a short point-of-use warning before
+   * actually sending something is different and belongs where the sending happens, but
+   * general reassurance belongs here and only here.
+   *
+   * Keep the outbound list complete. An earlier version claimed there was a single
+   * network request long after there were several, which is how a privacy promise quietly
+   * becomes a false statement.
+   */
+  function openPrivacySheet() {
+    V.ui.sheet('Privacy', (body) => {
+      body.appendChild(
+        V.el('div', { className: 'good-box' }, [
+          V.el('div', { html: '<strong>Your data is stored on your phone and never leaves it.</strong>' }),
+          V.el('div', {
+            style: { marginTop: '6px' },
+            text: 'Every meal, workout, weight and note lives in this browser on this device. ' +
+                  'There is no account, no server, no analytics and no tracking. Nobody else ' +
+                  'can see any of it.',
+          }),
+        ]),
+      );
+
+      body.appendChild(V.ui.sectionTitle('What does leave your phone'));
+      body.appendChild(
+        V.ui.list([
+          V.ui.row({ title: 'Food search', sub: 'The words you type go to Open Food Facts, while searching.' }),
+          V.ui.row({ title: 'Nearby places', sub: 'Your approximate location goes to OpenStreetMap, only when you open Nearby.' }),
+          V.ui.row({ title: 'Study photo help', sub: 'The photo and your note go to Google. Off unless you add your own key.' }),
+          V.ui.row({ title: 'On-device coach', sub: 'Downloads a model. Nothing is uploaded — it then runs on your phone.' }),
+        ]),
+      );
+      body.appendChild(
+        V.el('div', {
+          className: 'hint',
+          text: 'None of those carry anything you have logged, and everything except food ' +
+                'search is off until you choose to use it.',
+        }),
+      );
+
+      body.appendChild(V.ui.sectionTitle('Worth knowing'));
+      body.appendChild(
+        V.ui.list([
+          V.ui.row({ title: 'There is no recovery', sub: 'Nobody holds a copy. Lose the phone without a backup and it is gone.' }),
+          V.ui.row({ title: 'A passcode locks, it does not encrypt', sub: 'It stops someone opening the app; it does not scramble what is stored.' }),
+          V.ui.row({ title: 'Encrypt backups before cloud storage', sub: 'The plain download is readable by anyone who opens it.' }),
+          V.ui.row({ title: 'Open source', sub: 'All of this is checkable — the code is public under the MIT licence.' }),
+        ]),
+      );
+    });
+  }
+
   function openRestoreSheet() {
     V.ui.sheet('Restore from a backup', (body) => {
       body.appendChild(
@@ -745,53 +800,26 @@
         }),
       );
 
-      // ---- Privacy ----------------------------------------------------------
-      //
-      // This card must list EVERY outbound request the app can make. It previously
-      // claimed there was only one, which stopped being true as features were added —
-      // exactly the kind of drift that turns a privacy promise into a false statement.
-      // If you add a network call anywhere, add it here.
-      root.appendChild(V.ui.sectionTitle('Privacy'));
-      root.appendChild(
-        V.ui.card({
-          children: [
-            V.el('div', {
-              className: 'card-sub',
-              text: 'Everything you log is stored only in this browser, on this device. There is ' +
-                    'no account, no server, no analytics and no tracking. Your health data is ' +
-                    'never sent anywhere.',
-            }),
-          ],
-        }),
-      );
-
-      root.appendChild(V.ui.sectionTitle('Everything that leaves this device'));
+      // ---- About --------------------------------------------------------------
+      // The full privacy statement lives in one sheet rather than being repeated across
+      // the app. It is the single source of truth: every outbound request must be listed
+      // there, and nowhere else needs to restate it.
+      root.appendChild(V.ui.sectionTitle('About'));
       root.appendChild(
         V.ui.list([
           V.ui.row({
-            title: 'Food search',
-            sub: 'Open Food Facts — the words you type, when you search. Always on.',
+            title: 'Privacy statement',
+            sub: 'What is stored, and everything that leaves your phone',
+            value: '>',
+            onClick: openPrivacySheet,
           }),
           V.ui.row({
-            title: 'Map tiles & nearby places',
-            sub: 'OpenStreetMap — your approximate location, only when you open Nearby.',
-          }),
-          V.ui.row({
-            title: 'Study photo help',
-            sub: 'Google — the photo and your note, only when you tap to explain one. Off unless you add a key.',
-          }),
-          V.ui.row({
-            title: 'On-device coach download',
-            sub: 'jsDelivr and Hugging Face — code and model weights. Nothing is uploaded, and inference is local.',
+            title: 'Run setup again',
+            sub: 'Re-enter your age, weight and goal',
+            value: '>',
+            onClick: () => V.onboard.open({ rerun: true }),
           }),
         ]),
-      );
-      root.appendChild(
-        V.el('div', {
-          className: 'hint',
-          text: 'None of these carry your food logs, weights, workouts or notes. Everything ' +
-                'except food search is off until you use that feature.',
-        }),
       );
 
       // ---- Danger -----------------------------------------------------------
