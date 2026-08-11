@@ -160,18 +160,17 @@
     const settings = await V.store.settings.get();
     const targets = V.domain.macroTargets(settings);
 
-    const [entries, workouts, sleepLog, checkIn, weightDaily] = await Promise.all([
+    const [entries, workouts, sleepLog, notes, weightDaily] = await Promise.all([
       V.store.foodLog.resolved(date),
       V.store.workouts.byDate(date),
       V.store.sleep.byDate(date),
-      V.store.checkIns.get(date),
+      V.store.notes.upcoming(7),
       V.store.metrics.daily('weight'),
     ]);
 
     const totals = V.domain.sumNutrients(entries.map((e) => e.nutrients));
     const scored = V.domain.nutritionScore(entries, targets, settings);
     const trend = weightDaily.length >= 2 ? V.domain.trend(weightDaily.slice(-30), 30) : null;
-    const readiness = V.plan.readiness(checkIn);
 
     const lines = [
       `Date: ${date}`,
@@ -182,8 +181,12 @@
 
     if (scored.score != null) lines.push(`Food quality score today: ${scored.score}/100`);
     if (sleepLog) lines.push(`Slept: ${V.fmt(sleepLog.hours, 1)} hours`);
-    if (readiness != null) lines.push(`Morning readiness: ${readiness}/100`);
     if (workouts.length) lines.push(`Workouts today: ${workouts.length}`);
+    // Upcoming notes give the model context it cannot infer — an exam changes what good
+    // advice looks like.
+    for (const n of notes.slice(0, 3)) {
+      lines.push(`Note for ${n.date}: ${n.text}`);
+    }
     if (trend && trend.reliable) {
       lines.push(`Weight trend: ${V.fmt(trend.perWeek, 2)} kg per week over ${trend.n} days`);
     }

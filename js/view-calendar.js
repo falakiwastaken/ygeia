@@ -13,11 +13,11 @@
   async function loadRange(fromDate, toDate) {
     const [
       foodLogs, foods, workouts, sets, sports, studySessions,
-      sleepLogs, checkIns, metrics, subjects,
+      sleepLogs, notes, metrics, subjects,
     ] = await Promise.all([
       V.store.db.all('foodLogs'), V.store.foods.all(), V.store.workouts.all(),
       V.store.db.all('sets'), V.store.sports.all(), V.store.study.sessions(),
-      V.store.sleep.all(), V.store.checkIns.all(), V.store.db.all('metrics'),
+      V.store.sleep.all(), V.store.notes.all(), V.store.db.all('metrics'),
       V.store.study.subjects(),
     ]);
 
@@ -47,7 +47,7 @@
         sports: sports.filter((s) => s.date === date),
         studySessions: studySessions.filter((s) => s.date === date),
         sleep: sleepLogs.find((s) => s.date === date) || null,
-        checkIn: checkIns.find((c) => c.date === date) || null,
+        notes: notes.filter((n) => n.date === date),
         metrics: metrics.filter((m) => m.date === date),
         subjectsById,
       }),
@@ -166,6 +166,29 @@
 
       body.appendChild(V.el('div', { className: 'card-sub', text: V.longDate(date) }));
 
+      // ---- Notes -------------------------------------------------------------
+      const notes = await V.store.notes.byDate(date);
+      body.appendChild(V.el('div', { style: { height: '12px' } }));
+      body.appendChild(
+        V.ui.card({
+          title: 'Notes',
+          sub: notes.length ? null : 'Nothing written for this day',
+          action: V.el('button', {
+            className: 'icon-btn', type: 'button', text: '+', 'aria-label': 'Add a note',
+            on: { click: () => openNoteEditor(date, null) },
+          }),
+          children: notes.length
+            ? [V.ui.list(notes.map((n) =>
+                V.ui.row({
+                  title: n.text,
+                  sub: n.allDay === false ? V.timeOfDay(n.at) : undefined,
+                  onClick: () => openNoteEditor(date, n),
+                }),
+              ))]
+            : [V.ui.button('Write something', () => openNoteEditor(date, null), 'btn-ghost')],
+        }),
+      );
+
       if (!events.length) {
         body.appendChild(V.ui.empty('Nothing logged on this day.'));
       } else {
@@ -234,6 +257,149 @@
       );
       body.appendChild(V.el('div', { style: { height: '8px' } }));
       body.appendChild(V.ui.button('Back to calendar', () => { V.ui.closeSheet(); }, 'btn-ghost'));
+    });
+  };
+
+  // =================================================================== notes
+
+  /** Write or edit something on a day — "exam tomorrow", "deload week", "felt awful". */
+  function openNoteEditor(date, existing) {
+    V.ui.sheet(existing ? 'Edit note' : 'New note', (body) => {
+      const text = V.el('textarea', {
+        rows: 3,
+        placeholder: 'Exam tomorrow',
+        value: existing ? existing.text : '',
+      });
+
+      let allDay = existing ? existing.allDay !== false : true;
+      let timeValue = existing && existing.at
+        ? V.study.formatTime(new Date(existing.at).getHours() * 60 + new Date(existing.at).getMinutes())
+        : '09:00';
+
+      const timeInput = V.ui.input({ type: 'time', value: timeValue });
+      const timeField = V.ui.field('Time', timeInput);
+
+      const modeWrap = V.el('div');
+      const renderMode = () => {
+        modeWrap.innerHTML = '';
+        modeWrap.appendChild(
+          V.ui.segmented(
+            [{ value: true, label: 'All day' }, { value: false, label: 'At a time' }],
+            allDay,
+            (v) => { allDay = v; renderMode(); timeField.hidden = allDay; },
+          ),
+        );
+      };
+      renderMode();
+      timeField.hidden = allDay;
+
+      body.appendChild(V.ui.field('Note', text));
+      body.appendChild(V.ui.field('When', modeWrap));
+      body.appendChild(timeField);
+
+      body.appendChild(V.el('div', { style: { height: '10px' } }));
+      body.appendChild(
+        V.ui.button('Save', async () => {
+          const value = text.value.trim();
+          if (!value) return V.toast('Write something first');
+
+          const minutes = V.study.parseTime(timeInput.value);
+          const at = allDay || minutes == null
+            ? V.parseKey(date).getTime() + 8 * 3600000
+            : V.parseKey(date).getTime() + minutes * 60000;
+
+          await V.store.notes.save({
+            id: existing ? existing.id : V.uid(),
+            date,
+            text: value,
+            at,
+            allDay,
+            createdAt: existing ? existing.createdAt : Date.now(),
+          });
+
+          V.ui.closeSheet();
+          V.toast('Saved');
+          V.app.render();
+        }, 'btn-primary'),
+      );
+
+      if (existing) {
+        body.appendChild(V.el('div', { style: { height: '8px' } }));
+        body.appendChild(
+          V.ui.button('Delete note', async () => {
+            await V.store.notes.remove(existing.id);
+            V.ui.closeSheet();
+            V.toast('Deleted');
+            V.app.render();
+          }, 'btn-danger'),
+        );
+      }
+
+      setTimeout(() => text.focus(), 60);
+    });
+  }
+
+  C.openNoteEditor = openNoteEditor;
+
+  /**
+   * Today's notes plus anything coming up.
+   *
+   * Upcoming matters more than today's — the point of writing "exam tomorrow" is to be
+   * reminded of it today, not on the day itself when it is too late to be useful.
+   */
+  C.buildNotesCard = async function (state) {
+    const [todays, upcoming] = await Promise.all([
+      V.store.notes.byDate(state.date),
+      V.store.notes.upcoming(14),
+    ]);
+
+    const ahead = upcoming.filter((n) => n.date > state.date).slice(0, 3);
+    const children = [];
+
+    if (todays.length) {
+      children.push(V.ui.list(todays.map((n) =>
+        V.ui.row({
+          title: n.text,
+          sub: n.allDay === false ? V.timeOfDay(n.at) : undefined,
+          onClick: () => openNoteEditor(state.date, n),
+        }),
+      )));
+    }
+
+    if (ahead.length) {
+      if (todays.length) children.push(V.el('div', { style: { height: '10px' } }));
+      children.push(V.ui.sectionTitle('Coming up'));
+      children.push(V.ui.list(ahead.map((n) => {
+        const days = V.daysBetween(state.date, n.date);
+        return V.ui.row({
+          title: n.text,
+          sub: days === 1 ? 'Tomorrow' : `In ${days} days · ${V.friendlyDate(n.date)}`,
+          value: days === 1 ? '!' : String(days) + 'd',
+          onClick: () => openNoteEditor(n.date, n),
+        });
+      })));
+    }
+
+    if (!todays.length && !ahead.length) {
+      children.push(
+        V.el('div', { className: 'hint', text: 'Write anything you want to remember — "exam tomorrow", "deload week".' }),
+      );
+    }
+
+    children.push(V.el('div', { style: { height: '10px' } }));
+    children.push(
+      V.el('div', { className: 'btn-row' }, [
+        V.ui.button('Add a note', () => openNoteEditor(state.date, null), 'btn-ghost'),
+        V.ui.button('Calendar', () => C.open(state.date), 'btn-ghost'),
+      ]),
+    );
+
+    return V.ui.card({
+      title: 'Notes',
+      sub: ahead.length
+        ? `${ahead.length} coming up`
+        : (todays.length ? `${todays.length} today` : null),
+      children,
     });
   };
 

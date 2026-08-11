@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Ygeia — data analysis and insights.
  *
  * Correlations between the things you log. Pure functions, no DOM, no storage.
@@ -135,22 +135,11 @@
       negative: 'You lift more volume after shorter nights — unusual; check whether long ' +
                 'sleep is landing on your rest days.' },
 
-    { a: 'sleepHours', b: 'readiness', lag: 1,
-      title: 'Sleep and how you feel',
-      positive: 'Longer nights show up as higher morning readiness.',
-      negative: 'Longer sleep is tracking with lower readiness, which usually means you are ' +
-                'sleeping longer when already run down.' },
-
     { a: 'sleepHours', b: 'studyMinutes', lag: 1,
       title: 'Sleep and study output',
       positive: 'You study more, and for longer, after a full night.',
       negative: 'You study more after short nights — likely late cramming rather than sleep ' +
                 'causing anything.' },
-
-    { a: 'sleepHours', b: 'focus', lag: 1,
-      title: 'Sleep and focus',
-      positive: 'Your focus ratings are higher after longer nights.',
-      negative: 'Focus is rated higher after shorter nights, which is worth a sceptical look.' },
 
     { a: 'protein', b: 'trainingVolume', lag: 1,
       title: 'Protein and next-day training',
@@ -169,20 +158,10 @@
       positive: 'More movement during the day goes with longer sleep that night.',
       negative: 'More steps is going with shorter sleep.' },
 
-    { a: 'nutritionScore', b: 'readiness', lag: 1,
-      title: 'Food quality and readiness',
-      positive: 'Better-quality eating shows up as higher readiness the next morning.',
-      negative: 'Higher food-quality days are followed by lower readiness.' },
-
     { a: 'lateKcal', b: 'sleepHours', lag: 0,
       title: 'Late meals and sleep',
       positive: 'Eating late is going with longer sleep.',
       negative: 'Bigger late meals are going with shorter sleep.' },
-
-    { a: 'stress', b: 'sleepHours', lag: 0,
-      title: 'Stress and sleep',
-      positive: 'Higher-stress days go with longer sleep.',
-      negative: 'Higher-stress days go with shorter sleep.' },
 
     { a: 'studyMinutes', b: 'sleepHours', lag: 0,
       title: 'Study load and sleep',
@@ -194,9 +173,6 @@
   /** Human-readable metadata for each series, used in the UI and the custom explorer. */
   I.SERIES_META = {
     sleepHours:     { label: 'Sleep hours', unit: 'h' },
-    readiness:      { label: 'Morning readiness', unit: '/100' },
-    focus:          { label: 'Focus rating', unit: '/5' },
-    stress:         { label: 'Stress rating', unit: '/5' },
     calories:       { label: 'Calories', unit: 'kcal' },
     protein:        { label: 'Protein', unit: 'g' },
     nutritionScore: { label: 'Nutrition score', unit: '/100' },

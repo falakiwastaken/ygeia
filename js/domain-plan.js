@@ -1,69 +1,17 @@
 /*
- * Ygeia — check-ins, accountability, meal planning and training programs.
+ * Ygeia — accountability, meal planning and training programs.
  *
  * Pure functions. No DOM, no storage.
+ *
+ * The daily check-in that used to live here has been removed. It asked four questions
+ * every morning and three every evening to produce a "readiness" score, which is a lot of
+ * friction for one number — and the things it was correlated against are already measured
+ * directly by sleep, training volume and nutrition.
  */
 (function (V) {
   'use strict';
 
   const P = {};
-
-  // =========================================================================
-  // Daily check-in
-  // =========================================================================
-
-  /**
-   * Morning questions are about state you can only report on waking; evening ones are
-   * about the day you just had. Kept deliberately short — a check-in that takes two
-   * minutes stops getting done by week three.
-   */
-  P.MORNING_PROMPTS = [
-    { key: 'energy', label: 'Energy', low: 'Drained', high: 'Wired' },
-    { key: 'soreness', label: 'Soreness', low: 'None', high: 'Very sore', inverse: true },
-    { key: 'mood', label: 'Mood', low: 'Low', high: 'Great' },
-    { key: 'motivation', label: 'Motivation', low: 'None', high: 'High' },
-  ];
-
-  P.EVENING_PROMPTS = [
-    { key: 'stress', label: 'Stress today', low: 'Calm', high: 'Overwhelmed', inverse: true },
-    { key: 'focus', label: 'Focus', low: 'Scattered', high: 'Locked in' },
-    { key: 'satisfaction', label: 'Happy with the day', low: 'Not really', high: 'Very' },
-  ];
-
-  /**
-   * Readiness, 0–100, from the morning check-in.
-   * Inverse questions (soreness, stress) are flipped so that higher always means better,
-   * which keeps the score interpretable in one direction.
-   */
-  P.readiness = function (checkIn) {
-    if (!checkIn || !checkIn.morning) return null;
-    const answers = P.MORNING_PROMPTS
-      .map((p) => {
-        const raw = checkIn.morning[p.key];
-        if (raw == null) return null;
-        return p.inverse ? 6 - raw : raw;
-      })
-      .filter((x) => x != null);
-
-    if (!answers.length) return null;
-    // Answers are 1–5; map to 0–100.
-    return Math.round(((V.sum(answers) / answers.length - 1) / 4) * 100);
-  };
-
-  P.readinessAdvice = function (score) {
-    if (score == null) return null;
-    if (score >= 80) return 'Good day to push. Add a set or go for a top single.';
-    if (score >= 60) return 'Train as planned.';
-    if (score >= 40) return 'Keep the session but drop the intensity — hit your reps, skip the grinders.';
-    return 'Low readiness. A walk or mobility work beats a bad session you have to recover from.';
-  };
-
-  /** Days in a row with at least one completed check-in. */
-  P.checkInStreak = function (checkIns) {
-    return V.domain.streak(
-      checkIns.filter((c) => c.morning || c.evening).map((c) => c.date),
-    );
-  };
 
   // =========================================================================
   // Accountability habits

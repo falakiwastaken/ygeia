@@ -16,9 +16,14 @@
   // existing user's data. If it ever must change, migrate rather than rename.
   const DB_NAME = 'ygeia';
   // v2 added lifestyle tracking: sports, sleep, study, weight cuts and saved places.
-  // v3 added check-ins, accountability habits, meal plans and training programs.
+  // v3 added accountability habits, meal plans and training programs.
   // v4 added decks and migrated review items from one-sided to front/back cards.
-  const DB_VERSION = 4;
+  // v5 added calendar notes.
+  //
+  // The `checkIns` store is retained but no longer written to — the daily check-in was
+  // removed. It stays in the schema so anyone who used it keeps their history and their
+  // backups still restore. Dropping a store would silently destroy that.
+  const DB_VERSION = 5;
 
   /** store name -> { keyPath, indexes: [[name, keyPath, opts]] } */
   const SCHEMA = {
@@ -51,6 +56,10 @@
 
     // --- v4 ---
     decks: { keyPath: 'id', indexes: [['subjectId', 'subjectId']] },
+
+    // --- v5 ---
+    // Free-text things the user writes on a day: "exam tomorrow", "felt awful".
+    notes: { keyPath: 'id', indexes: [['date', 'date']] },
   };
 
   let dbPromise = null;
@@ -559,27 +568,24 @@
     remove: (id) => db.remove('places', id),
   };
 
-  // ------------------------------------------------------------- check-ins --
+  // ----------------------------------------------------------------- notes --
 
-  const checkIns = {
-    all: () => db.all('checkIns'),
-    get: (date) => db.get('checkIns', date),
-    save: (c) => db.put('checkIns', c),
-    remove: (date) => db.remove('checkIns', date),
+  const notes = {
+    all: () => db.all('notes'),
+    byDate: (date) => db.byIndex('notes', 'date', date),
+    save: (n) => db.put('notes', n),
+    remove: (id) => db.remove('notes', id),
 
-    /** Merge a partial answer set into the day's check-in, creating it if needed. */
-    async patch(date, part, answers) {
-      const existing = (await db.get('checkIns', date)) || { date };
-      existing[part] = Object.assign({}, existing[part], answers);
-      existing[part + 'At'] = Date.now();
-      await db.put('checkIns', existing);
-      return existing;
+    async range(startDate, endDate) {
+      return db.byIndex('notes', 'date', IDBKeyRange.bound(startDate, endDate));
     },
 
-    async recent(days) {
-      const all = await db.all('checkIns');
-      const since = V.addDays(V.today(), -((days || 30) - 1));
-      return all.filter((c) => c.date >= since).sort((a, b) => (a.date < b.date ? -1 : 1));
+    /** Notes dated from today onwards, soonest first — for the "exam tomorrow" prompt. */
+    async upcoming(days) {
+      const from = V.today();
+      const to = V.addDays(from, days == null ? 14 : days);
+      const rows = await db.byIndex('notes', 'date', IDBKeyRange.bound(from, to));
+      return rows.sort((a, b) => (a.date < b.date ? -1 : 1));
     },
   };
 
@@ -638,7 +644,7 @@
   V.store = {
     db, settings, foods, foodLog, exercises, workouts, sets, templates, metrics,
     sports, sleep, study, cuts, places,
-    checkIns, habits, mealPlans, programs,
+    notes, habits, mealPlans, programs,
     open, SCHEMA,
   };
 })(window.V);

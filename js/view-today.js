@@ -21,8 +21,8 @@
       const scored = V.domain.nutritionScore(entries, targets, settings);
       const root = V.el('div');
 
-      // ---- Check-in and accountability ------------------------------------
-      root.appendChild(await V.planView.buildCheckInCard(state));
+      // ---- Notes and accountability ---------------------------------------
+      root.appendChild(await V.calendar.buildNotesCard(state));
       root.appendChild(await V.planView.buildHabitsCard(state));
 
       // ---- Calorie ring + macros ------------------------------------------

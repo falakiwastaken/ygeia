@@ -39,6 +39,7 @@
 <script src="js/domain-rank.js"></script>
 <script src="js/domain-plan.js"></script>
 <script src="js/domain-insights.js"></script>
+<script src="js/domain-timeline.js"></script>
 <script src="js/map.js"></script>
 <script src="js/data-foods.js"></script>
 <script src="js/data-exercises.js"></script>
@@ -435,18 +436,6 @@
     V.PROGRAMS.every((p) => p.days.every((d) => d.exercises.every((e) => e.repMin <= e.repMax))) ? 1 : 0, 1);
 
   // =====================================================================
-  group('Check-in and habits');
-  // energy 4, soreness 2 (inverse -> 4), mood 4, motivation 5 => mean 4.25 => 81
-  t('readiness from morning answers',
-    V.plan.readiness({ morning: { energy: 4, soreness: 2, mood: 4, motivation: 5 } }), 81);
-  t('soreness is inverted (5 = worst)',
-    V.plan.readiness({ morning: { soreness: 5 } }), 0);
-  t('no morning check-in = no readiness',
-    V.plan.readiness({ evening: { focus: 3 } }) === null ? 1 : 0, 1);
-  t('all top marks = 100',
-    V.plan.readiness({ morning: { energy: 5, soreness: 1, mood: 5, motivation: 5 } }), 100);
-
-  // =====================================================================
   group('Meal planning');
   const foodMap = {};
   for (const f of V.seedFoods()) foodMap[f.id] = f;
@@ -675,6 +664,65 @@
     portionOf({ qty: 2, hadExplicitQty: true }, plain).confident ? 1 : 0, 0);
   t('no quantity and no servings is one 100g portion',
     portionOf({ qty: 1, hadExplicitQty: false }, plain).grams, 100);
+
+  // =====================================================================
+  group('Calendar grid');
+  // 1 Jan 2026 is a Thursday. Week starting Monday => 3 blank cells before it.
+  const jan = V.timeline.monthGrid(2026, 0, 1);
+  t('grid is whole weeks', jan.length % 7, 0);
+  t('January has 31 real days', jan.filter(Boolean).length, 31);
+  t('three blanks before Thursday the 1st', jan.indexOf(jan.find(Boolean)), 3);
+  t('first real cell is the 1st', jan.find(Boolean) === '2026-01-01' ? 1 : 0, 1);
+  t('last real cell is the 31st',
+    jan.filter(Boolean)[jan.filter(Boolean).length - 1] === '2026-01-31' ? 1 : 0, 1);
+  // February 2028 is a leap February.
+  t('leap February has 29 days', V.timeline.monthGrid(2028, 1, 1).filter(Boolean).length, 29);
+  t('weekday labels start on Monday', V.timeline.weekdayLabels(1).join('') === 'MTWTFSS' ? 1 : 0, 1);
+  t('weekday labels start on Sunday', V.timeline.weekdayLabels(0).join('') === 'SMTWTFS' ? 1 : 0, 1);
+
+  // =====================================================================
+  group('Day timeline');
+  const tlDate = '2026-03-10';
+  const base = V.parseKey(tlDate).getTime();
+  const built = V.timeline.buildDay({
+    date: tlDate,
+    // Two entries in one meal slot must collapse to a single row.
+    foodLogs: [
+      { meal: 'breakfast', loggedAt: base + 8 * 3600000, food: { name: 'Oats' }, nutrients: { kcal: 300 } },
+      { meal: 'breakfast', loggedAt: base + 8.2 * 3600000, food: { name: 'Banana' }, nutrients: { kcal: 100 } },
+      { meal: 'dinner', loggedAt: base + 19 * 3600000, food: { name: 'Salmon' }, nutrients: { kcal: 500 } },
+    ],
+    workouts: [{ id: 'w1', name: 'Push', startedAt: base + 17 * 3600000, finishedAt: base + 18 * 3600000 }],
+    setsByWorkout: { w1: [{ completed: true, type: 'working', weightKg: 100, reps: 5 }] },
+    sports: [],
+    studySessions: [{ startedAt: base + 14 * 3600000, minutes: 50 }],
+    sleep: { bedTimeMin: 1380, wakeTimeMin: 420, hours: 8 },
+    notes: [{ id: 'n1', text: 'Exam tomorrow', at: base + 9 * 3600000, allDay: true }],
+    metrics: [{ id: 'm1', type: 'weight', recordedAt: base + 7.5 * 3600000, value: 80, source: 'manual' }],
+    subjectsById: {},
+  });
+
+  t('meals collapse to one row per slot', built.filter((e) => e.category === 'meal').length, 2);
+  t('breakfast sums both items', built.find((e) => e.title === 'Breakfast').value === '400 kcal' ? 1 : 0, 1);
+  t('a note becomes an event', built.filter((e) => e.category === 'note').length, 1);
+  t('the workout appears', built.filter((e) => e.category === 'workout').length, 1);
+  t('sleep is filed at waking', built.filter((e) => e.category === 'sleep').length, 1);
+  t('weight is its own category', built.filter((e) => e.category === 'weight').length, 1);
+  t('events are in chronological order',
+    built.every((e, i, a) => i === 0 || a[i - 1].at <= e.at) ? 1 : 0, 1);
+  // 07:00 wake beats the 07:30 weigh-in.
+  t('the day starts with waking up', built[0].category === 'sleep' ? 1 : 0, 1);
+  t('an empty day produces no events',
+    V.timeline.buildDay({ date: tlDate, foodLogs: [], workouts: [], setsByWorkout: {} }).length, 0);
+
+  const catSummary = V.timeline.daySummary(built);
+  t('summary lists each category once', catSummary.length, new Set(catSummary).size);
+  t('notes sort first in the summary', catSummary[0] === 'note' ? 1 : 0, 1);
+  t('imported metrics are flagged approximate',
+    V.timeline.buildDay({
+      date: tlDate, foodLogs: [], workouts: [], setsByWorkout: {},
+      metrics: [{ id: 'm', type: 'steps', recordedAt: base, value: 9000, source: 'import' }],
+    })[0].approximateTime ? 1 : 0, 1);
 
   // =====================================================================
   group('Program sessions');

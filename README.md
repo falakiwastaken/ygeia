@@ -74,10 +74,14 @@ Soft parchment-and-sage theme by default, with a forest-night dark mode.
 - Nearby restaurants, cafés, libraries, gyms and supermarkets from OpenStreetMap
 - A hand-rolled slippy map (no Leaflet), cuisine, opening hours and website links
 
-**Check-ins & accountability**
-- Morning and evening check-ins that take about twenty seconds
-- A readiness score from energy, soreness, mood and motivation, with advice that actually
-  changes what you do ("drop the intensity, hit your reps, skip the grinders")
+**Calendar & notes**
+- A month grid showing which days have anything in them, coloured by category
+- A day view that replays it in order: when you woke, what you ate and when, when you
+  trained, when you studied, when you weighed in
+- Write notes on any day — "exam tomorrow", "deload week" — and anything coming up in the
+  next fortnight surfaces on Today, which is when it is still useful to know
+
+**Accountability**
 - Daily habits tracked yes/no — deliberately binary, because partial credit turns a
   commitment into a negotiation
 

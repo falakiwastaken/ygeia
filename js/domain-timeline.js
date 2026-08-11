@@ -22,7 +22,7 @@
     sport:   { label: 'Sport',       color: 'var(--strain)',    icon: '🏃' },
     study:   { label: 'Study',       color: 'var(--info)',      icon: '📖' },
     sleep:   { label: 'Sleep',       color: 'var(--sleep)',     icon: '🌙' },
-    checkin: { label: 'Check-in',    color: 'var(--recovery)',  icon: '✓' },
+    note:    { label: 'Note',        color: 'var(--recovery)',  icon: '📌' },
     metric:  { label: 'Measurement', color: 'var(--stress)',    icon: '📏' },
     weight:  { label: 'Weigh-in',    color: 'var(--stress)',    icon: '⚖' },
   };
@@ -135,29 +135,20 @@
       });
     }
 
-    // ---- Check-ins ---------------------------------------------------------
-    if (d.checkIn) {
-      if (d.checkIn.morningAt) {
-        const readiness = V.plan.readiness(d.checkIn);
-        events.push({
-          at: d.checkIn.morningAt,
-          category: 'checkin',
-          title: 'Morning check-in',
-          detail: readiness != null ? 'Readiness ' + readiness + '/100' : 'Logged',
-          value: '',
-          ref: { type: 'checkin', part: 'morning' },
-        });
-      }
-      if (d.checkIn.eveningAt) {
-        events.push({
-          at: d.checkIn.eveningAt,
-          category: 'checkin',
-          title: 'Evening check-in',
-          detail: 'Logged',
-          value: '',
-          ref: { type: 'checkin', part: 'evening' },
-        });
-      }
+    // ---- Notes -------------------------------------------------------------
+    // Things the user wrote on the day themselves — "exam tomorrow", "felt awful".
+    // An all-day note has no meaningful time, so it is pinned to 08:00 rather than
+    // midnight, where it would sort above the night's sleep and look wrong.
+    for (const n of d.notes || []) {
+      events.push({
+        at: n.at || (dayStart + 8 * 3600000),
+        category: 'note',
+        title: n.text,
+        detail: n.allDay === false ? '' : 'Note',
+        value: '',
+        allDay: n.allDay !== false,
+        ref: { type: 'note', id: n.id },
+      });
     }
 
     // ---- Measurements ------------------------------------------------------
@@ -183,7 +174,7 @@
     const set = [];
     for (const e of events) if (!set.includes(e.category)) set.push(e.category);
     // Stable, meaningful order rather than whatever happened first.
-    const order = ['sleep', 'meal', 'workout', 'sport', 'study', 'checkin', 'weight', 'metric'];
+    const order = ['note', 'sleep', 'meal', 'workout', 'sport', 'study', 'weight', 'metric'];
     return set.sort((a, b) => order.indexOf(a) - order.indexOf(b));
   };
 

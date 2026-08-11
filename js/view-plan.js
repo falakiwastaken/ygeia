@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Ygeia — check-ins, accountability, meal planning, training programs and insights.
  *
  * These surfaces are shared across tabs rather than owning one, so they live together
@@ -8,125 +8,6 @@
   'use strict';
 
   const NS = 'http://www.w3.org/2000/svg';
-
-  // =========================================================== daily check-in
-
-  function scaleRow(prompt, value, onPick) {
-    const wrap = V.el('div', { style: { marginBottom: '14px' } });
-    wrap.appendChild(
-      V.el('div', { className: 'macro-row' }, [
-        V.el('span', { text: prompt.label }),
-        V.el('span', { className: 'row-sub', text: value ? '' : '—' }),
-      ]),
-    );
-
-    const scale = V.el('div', { className: 'checkin-scale' });
-    for (let i = 1; i <= 5; i++) {
-      scale.appendChild(
-        V.el('button', {
-          className: 'checkin-dot' + (value === i ? ' on' : ''),
-          type: 'button',
-          text: String(i),
-          'aria-label': prompt.label + ' ' + i,
-          on: { click: () => onPick(i) },
-        }),
-      );
-    }
-    wrap.appendChild(scale);
-    wrap.appendChild(
-      V.el('div', { className: 'macro-row', style: { marginTop: '4px' } }, [
-        V.el('span', { className: 'row-sub', text: prompt.low }),
-        V.el('span', { className: 'row-sub', text: prompt.high }),
-      ]),
-    );
-    return wrap;
-  }
-
-  function openCheckInSheet(part) {
-    const prompts = part === 'morning' ? V.plan.MORNING_PROMPTS : V.plan.EVENING_PROMPTS;
-    const title = part === 'morning' ? 'Morning check-in' : 'Evening check-in';
-
-    V.ui.sheet(title, async (body) => {
-      const date = V.app.state.date;
-      const existing = (await V.store.checkIns.get(date)) || {};
-      const answers = Object.assign({}, existing[part]);
-
-      const list = V.el('div');
-      function render() {
-        list.innerHTML = '';
-        for (const p of prompts) {
-          list.appendChild(scaleRow(p, answers[p.key], (n) => { answers[p.key] = n; render(); }));
-        }
-      }
-      render();
-      body.appendChild(list);
-
-      const note = V.el('textarea', {
-        rows: 3,
-        placeholder: part === 'morning' ? 'Anything on your mind today?' : 'How did today actually go?',
-        value: (existing[part] && existing[part].note) || '',
-      });
-      body.appendChild(V.ui.field('Note (optional)', note));
-
-      body.appendChild(
-        V.ui.button('Save check-in', async () => {
-          if (!Object.keys(answers).length) return V.toast('Answer at least one');
-          answers.note = note.value.trim() || undefined;
-          await V.store.checkIns.patch(date, part, answers);
-          V.ui.closeSheet();
-          V.toast('Checked in');
-          V.app.render();
-        }, 'btn-primary'),
-      );
-    });
-  }
-
-  /** Today's check-in card, including readiness once the morning questions are answered. */
-  async function buildCheckInCard(state) {
-    const checkIn = await V.store.checkIns.get(state.date);
-    const readiness = V.plan.readiness(checkIn);
-    const recent = await V.store.checkIns.recent(60);
-    const streak = V.plan.checkInStreak(recent);
-
-    const children = [];
-
-    if (readiness != null) {
-      const band = V.domain.scoreBand(readiness);
-      children.push(
-        V.el('div', { className: 'grid-2' }, [
-          V.ui.stat({ label: 'Readiness', value: String(readiness), unit: '/100' }),
-          V.ui.stat({ label: 'Check-in streak', value: String(streak), unit: 'd' }),
-        ]),
-      );
-      children.push(V.el('div', { style: { height: '10px' } }));
-      children.push(V.ui.bar(readiness, 100, band.color));
-      children.push(V.el('div', { className: 'hint', text: V.plan.readinessAdvice(readiness) }));
-    } else {
-      children.push(V.el('div', { className: 'hint', text: 'A 20-second check-in gives you a readiness score and, over time, the data behind your insights.' }));
-    }
-
-    children.push(V.el('div', { style: { height: '10px' } }));
-    children.push(
-      V.el('div', { className: 'btn-row' }, [
-        V.ui.button(
-          (checkIn && checkIn.morning ? '✓ ' : '') + 'Morning',
-          () => openCheckInSheet('morning'),
-          checkIn && checkIn.morning ? 'btn-ghost' : 'btn-primary',
-        ),
-        V.ui.button(
-          (checkIn && checkIn.evening ? '✓ ' : '') + 'Evening',
-          () => openCheckInSheet('evening'),
-          checkIn && checkIn.evening ? 'btn-ghost' : '',
-        ),
-      ]),
-    );
-
-    return V.ui.card({
-      title: 'Check-in',
-      sub: checkIn && checkIn.morning && checkIn.evening ? 'Both done today' : 'How are you doing?',
-      children,
-    });
-  }
 
   // ============================================================ accountability
 
@@ -697,11 +578,11 @@
 
   /** Gather every daily series the insight engine can use, from one pass over storage. */
   async function buildSeriesBundle() {
-    const [foodLogs, foods, workouts, sets, sleepLogs, studySessions, checkInList, metrics, settings] =
+    const [foodLogs, foods, workouts, sets, sleepLogs, studySessions, metrics, settings] =
       await Promise.all([
         V.store.db.all('foodLogs'), V.store.foods.all(), V.store.workouts.all(),
         V.store.db.all('sets'), V.store.sleep.all(), V.store.study.sessions(),
-        V.store.checkIns.all(), V.store.db.all('metrics'), V.store.settings.get(),
+        V.store.db.all('metrics'), V.store.settings.get(),
       ]);
 
     const foodsById = {};
@@ -746,15 +627,6 @@
     for (const s of studySessions) studyByDate[s.date] = (studyByDate[s.date] || 0) + (s.minutes || 0);
     const studyMinutes = Object.keys(studyByDate).sort().map((date) => ({ date, value: studyByDate[date] }));
 
-    // ---- check-in derived
-    const readiness = [], focus = [], stress = [];
-    for (const c of checkInList.sort((a, b) => (a.date < b.date ? -1 : 1))) {
-      const r = V.plan.readiness(c);
-      if (r != null) readiness.push({ date: c.date, value: r });
-      if (c.evening && c.evening.focus != null) focus.push({ date: c.date, value: c.evening.focus });
-      if (c.evening && c.evening.stress != null) stress.push({ date: c.date, value: c.evening.stress });
-    }
-
     // ---- metrics
     const metricSeries = (type) => {
       const rows = metrics.filter((m) => m.type === type);
@@ -767,7 +639,6 @@
 
     return {
       sleepHours: sleepLogs.sort((a, b) => (a.date < b.date ? -1 : 1)).map((l) => ({ date: l.date, value: l.hours })),
-      readiness, focus, stress,
       calories, protein, nutritionScore, lateKcal,
       trainingVolume, studyMinutes,
       steps: metricSeries('steps'),
@@ -963,8 +834,7 @@
   }
 
   V.planView = {
-    buildCheckInCard, buildHabitsCard,
-    openCheckInSheet, openHabitsManageSheet,
+    buildHabitsCard, openHabitsManageSheet,
     openMealPlannerSheet, openShoppingListSheet,
     openProgramsSheet, openInsightsSheet,
     buildSeriesBundle,
