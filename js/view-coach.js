@@ -16,24 +16,71 @@
   // =========================================================== model manager
 
   C.openManager = function () {
-    V.ui.sheet('On-device coach', async (body) => {
+    V.ui.sheet('Coach', async (body) => {
       const caps = await V.aiLocal.capabilities();
+      const hasKey = await V.aiCloud.hasKey();
+      const cloudOn = await V.aiCloud.isEnabled();
 
+      // ---- Cloud option ------------------------------------------------------
+      body.appendChild(V.ui.sectionTitle('Use Google instead'));
       body.appendChild(
-        V.el('div', { className: 'warn-box' }, [
-          V.el('div', { html: '<strong>This is the only large download in Ygeia.</strong>' }),
-          V.el('div', {
-            style: { marginTop: '6px' },
-            text: 'Everything else is hand-written with no dependencies. Running a language ' +
-                  'model in a browser is not something you write yourself, so turning this on ' +
-                  'fetches a runtime and a model — a few hundred megabytes. Once installed it ' +
-                  'runs entirely on this device and nothing you say leaves it.',
+        V.ui.list([
+          V.ui.row({
+            title: 'Cloud coach',
+            sub: !hasKey
+              ? 'Needs the same API key as study photos — add it first'
+              : (cloudOn ? 'On — much better answers, but your data goes to Google' : 'Off'),
+            accessory: hasKey
+              ? V.ui.segmented(
+                  [{ value: false, label: 'Off' }, { value: true, label: 'On' }],
+                  cloudOn,
+                  async (v) => {
+                    if (v && !V.confirm(
+                      'Turn on the cloud coach?\n\n' +
+                      'Your calories, weight, sleep and training summary will be sent to ' +
+                      'Google each time you ask a question. On the free tier that content ' +
+                      'may be used for training and seen by human reviewers.',
+                    )) { V.ui.refreshSheet(); return; }
+                    await V.aiCloud.setEnabled(v);
+                    V.ui.refreshSheet();
+                    V.app.render();
+                  },
+                )
+              : null,
+            onClick: hasKey ? null : () => { V.ui.closeSheet(); V.solveView.openSolveSheet(); },
           }),
         ]),
       );
+      body.appendChild(
+        V.el('div', {
+          className: cloudOn ? 'danger-box' : 'hint',
+          text: cloudOn
+            ? 'Your health summary is sent to Google on every question. Turn this off to keep ' +
+              'everything on your phone.'
+            : 'Far better answers than anything that fits on a phone, but unlike the rest of ' +
+              'Ygeia it sends your health summary off the device.',
+        }),
+      );
+
+      if (cloudOn) {
+        body.appendChild(V.el('div', { style: { height: '12px' } }));
+        body.appendChild(V.ui.button('Open the coach', () => { V.ui.closeSheet(); C.openChat(); }, 'btn-primary'));
+        return;
+      }
+
+      // ---- Local option ------------------------------------------------------
+      body.appendChild(V.ui.sectionTitle('Or run one on your phone'));
+      body.appendChild(
+        V.el('div', {
+          className: 'hint',
+          text: 'Downloads a runtime and a model once — a few hundred megabytes — then runs ' +
+                'entirely on this device with nothing leaving it. Weaker than the cloud, but ' +
+                'private and free.',
+        }),
+      );
 
       if (!caps.ok) {
-        body.appendChild(V.el('div', { className: 'danger-box', style: { marginTop: '12px' }, text: caps.reason }));
+        body.appendChild(V.el('div', { className: 'warn-box', style: { marginTop: '12px' }, text: caps.reason }));
         return;
       }
 
@@ -66,14 +113,15 @@
       }
 
       // ---- Model picker ------------------------------------------------------
-      body.appendChild(V.ui.sectionTitle('Choose a model'));
       const listWrap = V.el('div');
       body.appendChild(listWrap);
       listWrap.appendChild(V.el('div', { className: 'hint', text: 'Reading the available models…' }));
 
       let models = [];
+      let recommended = [];
       try {
         models = await V.aiLocal.listModels();
+        recommended = await V.aiLocal.recommended();
       } catch (err) {
         listWrap.innerHTML = '';
         listWrap.appendChild(V.el('div', { className: 'warn-box', text: 'Could not reach the model catalogue: ' + err.message }));
@@ -86,18 +134,44 @@
         return;
       }
 
-      listWrap.appendChild(
-        V.ui.list(
-          models.slice(0, 12).map((m) =>
-            V.ui.row({
-              title: m.id.replace(/-MLC$/, ''),
-              sub: `about ${m.vramMB} MB` + (m.lowResource ? ' · runs on modest hardware' : ''),
-              value: '↓',
-              onClick: () => install(m),
-            }),
+      // A shortlist first — 77 ids sorted by megabytes is not a choice anyone can make.
+      if (recommended.length) {
+        listWrap.appendChild(V.ui.sectionTitle('Recommended'));
+        listWrap.appendChild(
+          V.ui.list(
+            recommended.map((r) =>
+              V.ui.row({
+                title: r.label,
+                sub: `${r.vramMB} MB · ${r.note}`,
+                value: '↓',
+                onClick: () => install({ id: r.id, vramMB: r.vramMB }),
+              }),
+            ),
           ),
-        ),
+        );
+      }
+
+      const allWrap = V.el('div');
+      listWrap.appendChild(V.el('div', { style: { height: '10px' } }));
+      listWrap.appendChild(
+        V.ui.button(`Show all ${models.length} models`, () => {
+          allWrap.innerHTML = '';
+          allWrap.appendChild(V.ui.sectionTitle('Everything that fits'));
+          allWrap.appendChild(
+            V.ui.list(
+              models.map((m) =>
+                V.ui.row({
+                  title: m.id.replace(/-MLC$/, ''),
+                  sub: `about ${m.vramMB} MB` + (m.lowResource ? ' · runs on modest hardware' : ''),
+                  value: '↓',
+                  onClick: () => install(m),
+                }),
+              ),
+            ),
+          );
+        }, 'btn-ghost'),
       );
+      listWrap.appendChild(allWrap);
 
       listWrap.appendChild(
         V.el('div', {
@@ -198,12 +272,23 @@
 
   C.openChat = function () {
     V.ui.sheet('Coach', async (body) => {
+      const useCloud = await V.aiCloud.isEnabled();
       const installed = await V.aiLocal.installedModel();
-      if (!installed) {
-        body.appendChild(V.ui.empty('No model installed.'));
+
+      if (!useCloud && !installed) {
+        body.appendChild(V.ui.empty('No coach set up yet.'));
         body.appendChild(V.ui.button('Set one up', () => { V.ui.closeSheet(); C.openManager(); }, 'btn-primary'));
         return;
       }
+
+      body.appendChild(
+        V.el('div', {
+          className: useCloud ? 'warn-box' : 'hint',
+          text: useCloud
+            ? 'Using Google. Your health summary is sent with each question.'
+            : 'Running on this device. Nothing you type leaves it.',
+        }),
+      );
 
       const log = V.el('div', { className: 'chat-log' });
       const input = V.ui.input({ placeholder: 'Ask about your training, food or sleep' });
@@ -244,21 +329,32 @@
         const reply = bubble('bot', '…');
 
         try {
-          if (!V.aiLocal.isLoaded()) {
-            reply.textContent = 'Loading the model…';
-            await V.aiLocal.load(installed, (p) => { reply.textContent = p.text; });
-          }
-
           const context = await buildContext();
-          const messages = history.concat([
-            { role: 'user', content: 'Here is my data:\n' + context + '\n\nQuestion: ' + question },
-          ]);
+          let full;
 
-          reply.textContent = '';
-          const full = await V.aiLocal.chat(messages, (piece, sofar) => {
-            reply.textContent = sofar;
-            log.scrollTop = log.scrollHeight;
-          });
+          if (useCloud) {
+            reply.textContent = 'Thinking…';
+            full = await V.aiCloud.chat(
+              history.concat([{ role: 'user', content: question }]),
+              context,
+            );
+            reply.textContent = full;
+          } else {
+            if (!V.aiLocal.isLoaded()) {
+              reply.textContent = 'Loading the model…';
+              await V.aiLocal.load(installed, (p) => { reply.textContent = p.text; });
+            }
+
+            const messages = history.concat([
+              { role: 'user', content: 'Here is my data:\n' + context + '\n\nQuestion: ' + question },
+            ]);
+
+            reply.textContent = '';
+            full = await V.aiLocal.chat(messages, (piece, sofar) => {
+              reply.textContent = sofar;
+              log.scrollTop = log.scrollHeight;
+            });
+          }
 
           history.push({ role: 'user', content: question });
           history.push({ role: 'assistant', content: full });

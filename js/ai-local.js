@@ -105,9 +105,54 @@
         lowResource: !!m.low_resource_required,
       }))
       .filter((m) => m.vramMB > 0 && m.vramMB <= MAX_VRAM_MB)
-      // Instruction-tuned models only — a base model will not hold a conversation.
-      .filter((m) => /instruct|chat|it-/i.test(m.id))
+      // Exclude what genuinely cannot hold a conversation: embedding models, and the
+      // handful of base models shipped without instruction tuning.
+      //
+      // This used to require "instruct" or "chat" in the id, which silently hid every
+      // Qwen3 and Qwen3.5 build — those are natively instruction-tuned and carry no such
+      // suffix, so the newest and best small models were invisible in the picker.
+      .filter((m) => !/embed/i.test(m.id))
+      .filter((m) => !/^(phi-1_5|phi-2|RedPajama|OLMo-\d+B-(?!Instruct))/i.test(m.id))
       .sort((a, b) => a.vramMB - b.vramMB);
+  };
+
+  /**
+   * A short recommended list, because 77 model ids sorted by megabytes is not a choice
+   * anyone can make. Each entry is checked against the live catalogue before being shown,
+   * so a model being renamed or dropped upstream just removes it rather than breaking.
+   */
+  L.RECOMMENDED = [
+    {
+      id: 'gemma3-1b-it-q4f16_1-MLC',
+      label: 'Gemma 3 1B',
+      note: 'Smallest that is still coherent. Fine on an older phone.',
+    },
+    {
+      id: 'Llama-3.2-1B-Instruct-q4f16_1-MLC',
+      label: 'Llama 3.2 1B',
+      note: 'Good balance of size and quality.',
+    },
+    {
+      id: 'Qwen3-1.7B-q4f16_1-MLC',
+      label: 'Qwen3 1.7B',
+      note: 'Noticeably better reasoning. The closest thing here to a Kimi-style model.',
+    },
+    {
+      id: 'Qwen3.5-2B-q4f16_1-MLC',
+      label: 'Qwen3.5 2B',
+      note: 'Best that fits in a browser. Needs a recent phone or a laptop.',
+    },
+  ];
+
+  /** Recommended models that actually exist in the current catalogue, with real sizes. */
+  L.recommended = async function () {
+    const available = await L.listModels();
+    const byId = {};
+    for (const m of available) byId[m.id] = m;
+
+    return L.RECOMMENDED
+      .filter((r) => byId[r.id])
+      .map((r) => Object.assign({}, r, { vramMB: byId[r.id].vramMB }));
   };
 
   /** Which model the user installed, if any. Persisted so it survives a reload. */

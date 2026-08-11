@@ -329,13 +329,18 @@
           V.ui.row({ title: 'Nearby places', sub: 'Your approximate location goes to OpenStreetMap, only when you open Nearby.' }),
           V.ui.row({ title: 'Study photo help', sub: 'The photo and your note go to Google. Off unless you add your own key.' }),
           V.ui.row({ title: 'On-device coach', sub: 'Downloads a model. Nothing is uploaded — it then runs on your phone.' }),
+          V.ui.row({
+            title: 'Cloud coach',
+            sub: 'The only feature that sends your health data. Off unless you turn it on.',
+          }),
         ]),
       );
       body.appendChild(
         V.el('div', {
           className: 'hint',
-          text: 'None of those carry anything you have logged, and everything except food ' +
-                'search is off until you choose to use it.',
+          text: 'Only the cloud coach sends anything you have logged, and it is off by ' +
+                'default — everything else carries no personal data at all. Every one of ' +
+                'these except food search stays off until you choose to use it.',
         }),
       );
 
