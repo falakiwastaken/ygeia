@@ -10,17 +10,20 @@
 <!--
   Content-Security-Policy.
 
-  The point of this is connect-src. The optional on-device coach imports third-party code
-  from a CDN, and that code runs in this origin with full access to IndexedDB. It cannot be
-  pinned with an integrity hash because ES module imports do not support one. So instead of
-  trusting it, this policy enumerates every host anything on this page may talk to —
-  substituted or compromised code still has nowhere to send your health data.
+  script-src is 'self' and nothing else. No CDN, no third-party code, no import() at
+  runtime — every line that executes here came from this repository. Ygeia briefly shipped
+  an optional on-device model that pulled a runtime from a CDN; that code ran in this origin
+  with full IndexedDB access and could not be pinned with an integrity hash, so removing it
+  removed the only way untrusted code could ever reach your data.
+
+  connect-src then enumerates every host anything on this page may talk to, so even a
+  cross-site scripting bug has nowhere to send what it reads.
 
   If you add a network call, add its host here or it will silently fail.
 -->
 <meta http-equiv="Content-Security-Policy" content="
   default-src 'self';
-  script-src 'self' https://esm.run https://cdn.jsdelivr.net;
+  script-src 'self';
   style-src 'self' 'unsafe-inline';
   img-src 'self' data: blob: https://tile.openstreetmap.org;
   font-src 'self';
@@ -30,11 +33,6 @@
     https://overpass-api.de
     https://nominatim.openstreetmap.org
     https://generativelanguage.googleapis.com
-    https://esm.run
-    https://cdn.jsdelivr.net
-    https://huggingface.co
-    https://cdn-lfs.huggingface.co
-    https://cdn-lfs-us-1.huggingface.co
     https://raw.githubusercontent.com;
   base-uri 'self';
   form-action 'none';
@@ -49,7 +47,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 
-<link rel="stylesheet" href="css/app.css?v=17">
+<link rel="stylesheet" href="css/app.css?v=18">
 </head>
 <body>
 
@@ -124,50 +122,49 @@
   Deliberately NOT ES modules: <script type="module"> is blocked by CORS on file:// URLs,
   and this app must run by opening index.html with no server and no build step.
 -->
-<script src="js/util.js?v=17"></script>
-<script src="js/store.js?v=17"></script>
-<script src="js/auth.js?v=17"></script>
-<script src="js/domain.js?v=17"></script>
-<script src="js/domain-life.js?v=17"></script>
-<script src="js/domain-cut.js?v=17"></script>
-<script src="js/domain-study.js?v=17"></script>
-<script src="js/domain-rank.js?v=17"></script>
-<script src="js/domain-plan.js?v=17"></script>
-<script src="js/domain-insights.js?v=17"></script>
-<script src="js/domain-timeline.js?v=17"></script>
-<script src="js/domain-gaps.js?v=17"></script>
-<script src="js/data-meals.js?v=17"></script>
-<script src="js/data-programs.js?v=17"></script>
-<script src="js/explain.js?v=17"></script>
-<script src="js/data-foods.js?v=17"></script>
-<script src="js/data-exercises.js?v=17"></script>
-<script src="js/ui.js?v=17"></script>
-<script src="js/charts.js?v=17"></script>
-<script src="js/map.js?v=17"></script>
-<script src="js/openfoodfacts.js?v=17"></script>
-<script src="js/food-parser.js?v=17"></script>
-<script src="js/ai-prompt.js?v=17"></script>
-<script src="js/ai-vision.js?v=17"></script>
-<script src="js/ai-local.js?v=17"></script>
-<script src="js/ai-cloud.js?v=17"></script>
-<script src="js/places.js?v=17"></script>
-<script src="js/healthimport.js?v=17"></script>
-<script src="js/backup.js?v=17"></script>
-<script src="js/view-today.js?v=17"></script>
-<script src="js/view-food.js?v=17"></script>
-<script src="js/view-train.js?v=17"></script>
-<script src="js/view-study.js?v=17"></script>
-<script src="js/view-flashcards.js?v=17"></script>
-<script src="js/view-solve.js?v=17"></script>
-<script src="js/view-aikey.js?v=17"></script>
-<script src="js/view-calendar.js?v=17"></script>
-<script src="js/view-coach.js?v=17"></script>
-<script src="js/view-body.js?v=17"></script>
-<script src="js/view-cut.js?v=17"></script>
-<script src="js/view-plan.js?v=17"></script>
-<script src="js/view-lock.js?v=17"></script>
-<script src="js/view-onboard.js?v=17"></script>
-<script src="js/view-settings.js?v=17"></script>
-<script src="js/app.js?v=17"></script>
+<script src="js/util.js?v=18"></script>
+<script src="js/store.js?v=18"></script>
+<script src="js/auth.js?v=18"></script>
+<script src="js/domain.js?v=18"></script>
+<script src="js/domain-life.js?v=18"></script>
+<script src="js/domain-cut.js?v=18"></script>
+<script src="js/domain-study.js?v=18"></script>
+<script src="js/domain-rank.js?v=18"></script>
+<script src="js/domain-plan.js?v=18"></script>
+<script src="js/domain-insights.js?v=18"></script>
+<script src="js/domain-timeline.js?v=18"></script>
+<script src="js/domain-gaps.js?v=18"></script>
+<script src="js/data-meals.js?v=18"></script>
+<script src="js/data-programs.js?v=18"></script>
+<script src="js/explain.js?v=18"></script>
+<script src="js/data-foods.js?v=18"></script>
+<script src="js/data-exercises.js?v=18"></script>
+<script src="js/ui.js?v=18"></script>
+<script src="js/charts.js?v=18"></script>
+<script src="js/map.js?v=18"></script>
+<script src="js/openfoodfacts.js?v=18"></script>
+<script src="js/food-parser.js?v=18"></script>
+<script src="js/ai-prompt.js?v=18"></script>
+<script src="js/ai-vision.js?v=18"></script>
+<script src="js/ai-cloud.js?v=18"></script>
+<script src="js/places.js?v=18"></script>
+<script src="js/healthimport.js?v=18"></script>
+<script src="js/backup.js?v=18"></script>
+<script src="js/view-today.js?v=18"></script>
+<script src="js/view-food.js?v=18"></script>
+<script src="js/view-train.js?v=18"></script>
+<script src="js/view-study.js?v=18"></script>
+<script src="js/view-flashcards.js?v=18"></script>
+<script src="js/view-solve.js?v=18"></script>
+<script src="js/view-aikey.js?v=18"></script>
+<script src="js/view-calendar.js?v=18"></script>
+<script src="js/view-coach.js?v=18"></script>
+<script src="js/view-body.js?v=18"></script>
+<script src="js/view-cut.js?v=18"></script>
+<script src="js/view-plan.js?v=18"></script>
+<script src="js/view-lock.js?v=18"></script>
+<script src="js/view-onboard.js?v=18"></script>
+<script src="js/view-settings.js?v=18"></script>
+<script src="js/app.js?v=18"></script>
 </body>
 </html>

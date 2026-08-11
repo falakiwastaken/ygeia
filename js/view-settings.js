@@ -328,9 +328,8 @@
           V.ui.row({ title: 'Food search', sub: 'The words you type go to Open Food Facts, while searching.' }),
           V.ui.row({ title: 'Nearby places', sub: 'Your approximate location goes to OpenStreetMap, only when you open Nearby.' }),
           V.ui.row({ title: 'Study photo help', sub: 'The photo and your note go to Google. Off unless you add your own key.' }),
-          V.ui.row({ title: 'On-device coach', sub: 'Downloads a model. Nothing is uploaded — it then runs on your phone.' }),
           V.ui.row({
-            title: 'Cloud coach',
+            title: 'Coach',
             sub: 'The only feature that sends your health data. Off unless you turn it on.',
           }),
         ]),
@@ -338,9 +337,9 @@
       body.appendChild(
         V.el('div', {
           className: 'hint',
-          text: 'Only the cloud coach sends anything you have logged, and it is off by ' +
-                'default — everything else carries no personal data at all. Every one of ' +
-                'these except food search stays off until you choose to use it.',
+          text: 'Only the coach sends anything you have logged, and it is off by default — ' +
+                'everything else carries no personal data at all. Every one of these except ' +
+                'food search stays off until you choose to use it.',
         }),
       );
 
@@ -696,55 +695,33 @@
       // ---- AI features --------------------------------------------------------
       root.appendChild(V.ui.sectionTitle('AI features'));
       root.appendChild(V.ui.list(await V.aiKeyView.buildSettingsRows()));
-      root.appendChild(
-        V.el('div', {
-          className: 'hint',
-          text: 'Everything in Ygeia works without this. Adding a free Google API key unlocks ' +
-                'the cloud coach and study photo help; the on-device coach below needs no key ' +
-                'at all and never sends anything anywhere.',
-        }),
-      );
-
-      // ---- On-device coach ----------------------------------------------------
-      root.appendChild(V.ui.sectionTitle('On-device coach'));
-      const localModel = await V.aiLocal.installedModel();
+      const coachOn = await V.aiCloud.isEnabled();
       root.appendChild(
         V.ui.list([
           V.ui.row({
-            title: 'Local AI coach',
-            sub: localModel ? localModel.replace(/-MLC$/, '') : 'Not installed — optional, few hundred MB',
-            value: localModel ? 'On' : 'Off',
+            title: 'Coach',
+            sub: coachOn ? 'On — sends your summary to Google' : 'Off',
+            value: coachOn ? 'On' : 'Off',
             onClick: () => V.coachView.openManager(),
           }),
-          localModel
+          coachOn
             ? V.ui.row({
                 title: 'Open the coach',
-                sub: 'Chat about your own data, entirely offline',
+                sub: 'Ask about meals, training or studying',
                 onClick: () => V.coachView.openChat(),
               })
             : null,
+          ...(await V.solveView.buildSettingsRows()),
         ].filter(Boolean)),
       );
       root.appendChild(
         V.el('div', {
           className: 'hint',
-          text: 'Optional. Ygeia ships with no dependencies; installing this pulls a runtime ' +
-                'and a model from the internet once, after which it runs on your device and ' +
-                'nothing you type leaves it. Every number it quotes comes from the ordinary ' +
-                'calculations — it is told not to invent figures.',
-        }),
-      );
-
-      // ---- Study photo help ---------------------------------------------------
-      root.appendChild(V.ui.sectionTitle('Study photo help'));
-      root.appendChild(V.ui.list(await V.solveView.buildSettingsRows()));
-      root.appendChild(
-        V.el('div', {
-          className: 'hint',
-          text: 'This is the only feature that sends anything off your device, and only ever ' +
-                'the photo you take plus your note — never your health data, which is enforced ' +
-                'in code. Google\'s free tier may use submitted images for training and human ' +
-                'reviewers can see them, so photograph the question and nothing else.',
+          text: 'Everything else in Ygeia works without a key and without the internet — your ' +
+                'logs, every calculation, and the “what you’re missing” analysis. Ygeia has no ' +
+                'built-in model and downloads nothing; these two features run on Google using a ' +
+                'free key you provide. Google’s free tier may use what you send to improve their ' +
+                'models, and human reviewers can see it.',
         }),
       );
 

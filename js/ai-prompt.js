@@ -1,10 +1,9 @@
 /*
  * Ygeia — the coach's scope, defined once.
  *
- * There are two coach backends: js/ai-local.js (runs on the device) and js/ai-cloud.js
- * (sends a summary to Google). They must behave identically about what they will and will
- * not answer, so the boundary lives here rather than being copy-pasted into both, where it
- * would eventually drift.
+ * Two things talk to a model: js/ai-cloud.js (the coach) and js/ai-vision.js (study photo
+ * help). They must agree about what is in scope, so the boundary lives here rather than
+ * being copy-pasted into both, where it would eventually drift.
  *
  * The scope is deliberately narrow: FOOD PREPARATION, TRAINING and STUDYING. Not health.
  *

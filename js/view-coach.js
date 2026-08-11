@@ -1,8 +1,15 @@
 /*
- * Ygeia — on-device coach.
+ * Ygeia — the coach.
  *
- * Chat over your own data, with the model running on this device. Optional, opt-in, and
- * the only part of the app that downloads anything substantial.
+ * Chat over your own data. This needs a Google API key, which the user supplies; there is
+ * no bundled model and nothing to download.
+ *
+ * Ygeia previously offered an on-device model as a private alternative. It was removed
+ * deliberately: it meant importing a runtime from a CDN that then ran in this origin with
+ * full IndexedDB access and could not be pinned with an integrity hash, and it asked people
+ * to give up ~1 GB of phone storage for replies a hosted model does far better. The result
+ * is that the coach is now the one feature that sends health data, which the UI states
+ * plainly rather than burying.
  *
  * The context handed to the model is built HERE, from figures the deterministic engines
  * already computed. The model is told it may not invent numbers, and it never calculates
@@ -13,213 +20,90 @@
 
   const C = {};
 
-  // =========================================================== model manager
+  // =============================================================== setup sheet
 
   C.openManager = function () {
     V.ui.sheet('Coach', async (body) => {
-      const caps = await V.aiLocal.capabilities();
       const hasKey = await V.aiCloud.hasKey();
       const cloudOn = await V.aiCloud.isEnabled();
 
-      // ---- Cloud option ------------------------------------------------------
-      body.appendChild(V.ui.sectionTitle('Use Google instead'));
+      if (!hasKey) {
+        body.appendChild(
+          V.el('div', { className: 'warn-box' }, [
+            V.el('div', { html: '<strong>The coach needs an API key.</strong>' }),
+            V.el('div', {
+              style: { marginTop: '6px' },
+              text: 'Ygeia has no built-in model and downloads nothing. The coach runs on ' +
+                    'Google, using a free key you provide.',
+            }),
+          ]),
+        );
+        body.appendChild(V.el('div', { style: { height: '12px' } }));
+        body.appendChild(
+          V.ui.button('Add a key', () => { V.ui.closeSheet(); V.aiKeyView.openSheet(); }, 'btn-primary'),
+        );
+        body.appendChild(
+          V.el('div', {
+            className: 'hint',
+            text: 'Free and takes about a minute. Everything else in Ygeia — your logs, the ' +
+                  'calculations, and the “what you’re missing” analysis — works without one ' +
+                  'and never leaves this device.',
+          }),
+        );
+        return;
+      }
+
+      body.appendChild(V.ui.sectionTitle('Coach'));
       body.appendChild(
         V.ui.list([
           V.ui.row({
-            title: 'Cloud coach',
-            sub: !hasKey
-              ? 'Needs an API key — add one under AI features in Settings'
-              : (cloudOn ? 'On — much better answers, but your data goes to Google' : 'Off'),
-            accessory: hasKey
-              ? V.ui.segmented(
-                  [{ value: false, label: 'Off' }, { value: true, label: 'On' }],
-                  cloudOn,
-                  async (v) => {
-                    if (v && !V.confirm(
-                      'Turn on the cloud coach?\n\n' +
-                      'Sent to Google with every question: your calorie and protein totals, ' +
-                      'food quality score, weight trend, workout count, the gaps Ygeia has ' +
-                      'calculated (including sleep), and your next few calendar notes — so ' +
-                      'do not write anything private in those.\n\n' +
-                      'On the free tier that content may be used for training and seen by ' +
-                      'human reviewers.',
-                    )) { V.ui.refreshSheet(); return; }
-                    await V.aiCloud.setEnabled(v);
-                    V.ui.refreshSheet();
-                    V.app.render();
-                  },
-                )
-              : null,
-            onClick: hasKey ? null : () => { V.ui.closeSheet(); V.aiKeyView.openSheet(); },
+            title: 'Enable the coach',
+            sub: cloudOn ? 'On — your summary goes to Google with each question' : 'Off',
+            accessory: V.ui.segmented(
+              [{ value: false, label: 'Off' }, { value: true, label: 'On' }],
+              cloudOn,
+              async (v) => {
+                if (v && !V.confirm(
+                  'Turn on the coach?\n\n' +
+                  'Sent to Google with every question: your calorie and protein totals, food ' +
+                  'quality score, weight trend, workout count, the gaps Ygeia has calculated ' +
+                  '(including sleep), and your next few calendar notes — so do not write ' +
+                  'anything private in those.\n\n' +
+                  'On the free tier that content may be used for training and seen by human ' +
+                  'reviewers.',
+                )) { V.ui.refreshSheet(); return; }
+                await V.aiCloud.setEnabled(v);
+                V.ui.refreshSheet();
+                V.app.render();
+              },
+            ),
           }),
         ]),
       );
+
       body.appendChild(
         V.el('div', {
           className: cloudOn ? 'danger-box' : 'hint',
           text: cloudOn
             ? 'Your daily summary and upcoming calendar notes are sent to Google on every ' +
               'question. Turn this off to keep everything on your phone.'
-            : 'Far better answers than anything that fits on a phone, but unlike the rest of ' +
-              'Ygeia it sends your health summary off the device.',
+            : 'This is the only feature that sends anything you have logged. It stays off ' +
+              'until you turn it on here.',
         }),
       );
 
       if (cloudOn) {
         body.appendChild(V.el('div', { style: { height: '12px' } }));
         body.appendChild(V.ui.button('Open the coach', () => { V.ui.closeSheet(); C.openChat(); }, 'btn-primary'));
-        return;
       }
 
-      // ---- Local option ------------------------------------------------------
-      body.appendChild(V.ui.sectionTitle('Or run one on your phone'));
       body.appendChild(
         V.el('div', {
           className: 'hint',
-          text: 'Downloads a runtime and a model once — a few hundred megabytes — then runs ' +
-                'entirely on this device with nothing leaving it. Weaker than the cloud, but ' +
-                'private and free.',
+          style: { marginTop: '12px' },
+          text: V.COACH_SCOPE_NOTE,
         }),
       );
-
-      if (!caps.ok) {
-        body.appendChild(V.el('div', { className: 'warn-box', style: { marginTop: '12px' }, text: caps.reason }));
-        return;
-      }
-
-      const installed = await V.aiLocal.installedModel();
-
-      if (installed) {
-        const usedMB = await V.aiLocal.cacheSizeMB();
-        body.appendChild(
-          V.ui.card({
-            title: 'Installed',
-            sub: installed,
-            children: [
-              V.ui.button('Open the coach', () => { V.ui.closeSheet(); C.openChat(); }, 'btn-primary'),
-              V.el('div', { style: { height: '8px' } }),
-              V.ui.button(
-                usedMB ? `Delete model (about ${usedMB} MB)` : 'Delete model',
-                async () => {
-                  if (!V.confirm('Delete the downloaded model? You can reinstall it later.')) return;
-                  await V.aiLocal.deleteModel();
-                  V.toast('Model deleted');
-                  V.ui.refreshSheet();
-                  V.app.render();
-                },
-                'btn-danger',
-              ),
-            ],
-          }),
-        );
-        return;
-      }
-
-      // ---- Model picker ------------------------------------------------------
-      const listWrap = V.el('div');
-      body.appendChild(listWrap);
-      listWrap.appendChild(V.el('div', { className: 'hint', text: 'Reading the available models…' }));
-
-      let models = [];
-      let recommended = [];
-      try {
-        models = await V.aiLocal.listModels();
-        recommended = await V.aiLocal.recommended();
-      } catch (err) {
-        listWrap.innerHTML = '';
-        listWrap.appendChild(V.el('div', { className: 'warn-box', text: 'Could not reach the model catalogue: ' + err.message }));
-        return;
-      }
-
-      listWrap.innerHTML = '';
-      if (!models.length) {
-        listWrap.appendChild(V.ui.empty('No small enough models are available.'));
-        return;
-      }
-
-      // A shortlist first — 77 ids sorted by megabytes is not a choice anyone can make.
-      if (recommended.length) {
-        listWrap.appendChild(V.ui.sectionTitle('Recommended'));
-        listWrap.appendChild(
-          V.ui.list(
-            recommended.map((r) =>
-              V.ui.row({
-                title: r.label,
-                sub: `${r.vramMB} MB · ${r.note}`,
-                value: '↓',
-                onClick: () => install({ id: r.id, vramMB: r.vramMB }),
-              }),
-            ),
-          ),
-        );
-      }
-
-      const allWrap = V.el('div');
-      listWrap.appendChild(V.el('div', { style: { height: '10px' } }));
-      listWrap.appendChild(
-        V.ui.button(`Show all ${models.length} models`, () => {
-          allWrap.innerHTML = '';
-          allWrap.appendChild(V.ui.sectionTitle('Everything that fits'));
-          allWrap.appendChild(
-            V.ui.list(
-              models.map((m) =>
-                V.ui.row({
-                  title: m.id.replace(/-MLC$/, ''),
-                  sub: `about ${m.vramMB} MB` + (m.lowResource ? ' · runs on modest hardware' : ''),
-                  value: '↓',
-                  onClick: () => install(m),
-                }),
-              ),
-            ),
-          );
-        }, 'btn-ghost'),
-      );
-      listWrap.appendChild(allWrap);
-
-      listWrap.appendChild(
-        V.el('div', {
-          className: 'hint',
-          text: caps.quotaMB
-            ? `This browser will let Ygeia store about ${caps.quotaMB} MB in total. Pick a model ` +
-              'comfortably under that.'
-            : 'Smaller models answer faster but less well.',
-        }),
-      );
-
-      function install(model) {
-        V.ui.sheet('Installing', (sheet) => {
-          const label = V.el('div', { className: 'hint', text: 'Starting…' });
-          const barWrap = V.el('div', { className: 'bar' }, [
-            V.el('div', { className: 'bar-fill', style: { width: '0%', background: 'var(--recovery)' } }),
-          ]);
-
-          sheet.appendChild(V.el('div', { className: 'card-sub', text: model.id }));
-          sheet.appendChild(V.el('div', { style: { height: '12px' } }));
-          sheet.appendChild(barWrap);
-          sheet.appendChild(label);
-          sheet.appendChild(
-            V.el('div', {
-              className: 'hint',
-              text: 'Keep this screen open. The download is cached, so it only happens once.',
-            }),
-          );
-
-          V.aiLocal
-            .load(model.id, (p) => {
-              barWrap.firstChild.style.width = Math.round((p.progress || 0) * 100) + '%';
-              label.textContent = p.text;
-            })
-            .then(() => {
-              V.ui.closeSheet(true);
-              V.toast('Model ready');
-              C.openChat();
-            })
-            .catch((err) => {
-              label.textContent = '';
-              sheet.appendChild(V.el('div', { className: 'danger-box', text: err.message }));
-            });
-        });
-      }
     });
   };
 
@@ -228,9 +112,9 @@
   /**
    * A compact snapshot of figures the deterministic engines already produced.
    *
-   * Deliberately small: a local model has a limited context window, and a long dump makes
-   * replies slower and vaguer. Only numbers that already exist go in — nothing is
-   * computed here for the model's benefit.
+   * Deliberately small: a long dump makes replies slower and vaguer, and every line here is
+   * a line of health data leaving the device. Only numbers that already exist go in —
+   * nothing is computed here for the model's benefit.
    */
   async function buildContext() {
     const date = V.app.state.date;
@@ -278,6 +162,9 @@
   /**
    * Gather what V.gaps needs. This lives here rather than in the domain layer because it
    * reads storage; the analysis itself stays pure and testable.
+   *
+   * Note this runs for the Today card too, with no key and no network — the gap analysis
+   * is not an AI feature and must never depend on one.
    */
   C.findGaps = async function () {
     const date = V.app.state.date;
@@ -323,21 +210,16 @@
 
   C.openChat = function () {
     V.ui.sheet('Coach', async (body) => {
-      const useCloud = await V.aiCloud.isEnabled();
-      const installed = await V.aiLocal.installedModel();
-
-      if (!useCloud && !installed) {
-        body.appendChild(V.ui.empty('No coach set up yet.'));
-        body.appendChild(V.ui.button('Set one up', () => { V.ui.closeSheet(); C.openManager(); }, 'btn-primary'));
+      if (!(await V.aiCloud.isEnabled())) {
+        body.appendChild(V.ui.empty('The coach is off.'));
+        body.appendChild(V.ui.button('Set it up', () => { V.ui.closeSheet(); C.openManager(); }, 'btn-primary'));
         return;
       }
 
       body.appendChild(
         V.el('div', {
-          className: useCloud ? 'warn-box' : 'hint',
-          text: useCloud
-            ? 'Using Google. Your daily summary and upcoming notes are sent with each question.'
-            : 'Running on this device. Nothing you type leaves it.',
+          className: 'warn-box',
+          text: 'Your daily summary and upcoming notes are sent to Google with each question.',
         }),
       );
 
@@ -376,39 +258,19 @@
         bubble('user', question);
         sendBtn.disabled = true;
 
-        const reply = bubble('bot', '…');
+        const reply = bubble('bot', 'Thinking…');
 
         try {
           const context = await buildContext();
-          let full;
-
-          if (useCloud) {
-            reply.textContent = 'Thinking…';
-            full = await V.aiCloud.chat(
-              history.concat([{ role: 'user', content: question }]),
-              context,
-            );
-            reply.textContent = full;
-          } else {
-            if (!V.aiLocal.isLoaded()) {
-              reply.textContent = 'Loading the model…';
-              await V.aiLocal.load(installed, (p) => { reply.textContent = p.text; });
-            }
-
-            const messages = history.concat([
-              { role: 'user', content: 'Here is my data:\n' + context + '\n\nQuestion: ' + question },
-            ]);
-
-            reply.textContent = '';
-            full = await V.aiLocal.chat(messages, (piece, sofar) => {
-              reply.textContent = sofar;
-              log.scrollTop = log.scrollHeight;
-            });
-          }
+          const full = await V.aiCloud.chat(
+            history.concat([{ role: 'user', content: question }]),
+            context,
+          );
+          reply.textContent = full;
 
           history.push({ role: 'user', content: question });
           history.push({ role: 'assistant', content: full });
-          // Keep the window short — a small model degrades quickly with a long history.
+          // Keep the window short — every turn resent is more data over the wire.
           while (history.length > 6) history.shift();
         } catch (err) {
           reply.textContent = 'Failed: ' + err.message;

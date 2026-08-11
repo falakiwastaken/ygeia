@@ -5,8 +5,9 @@
  * you to "add it first" and then sent you somewhere named after a different feature. One
  * key unlocks both, so it gets one screen, in Settings, where someone would look for it.
  *
- * Nothing here is required. The app's calculations, the gap analysis and the on-device
- * coach all work with no key at all — this only unlocks the two features that need Google.
+ * Nothing here is required. The app's logs, calculations and gap analysis all work with no
+ * key and no internet — this only unlocks the two features that need Google. Ygeia has no
+ * built-in model and downloads nothing, so without a key there is simply no AI.
  */
 (function (V) {
   'use strict';
@@ -33,8 +34,9 @@
             style: { marginTop: '6px' },
             text: hasKey
               ? 'Remove it at any time and the rest of the app carries on unchanged.'
-              : 'Every calculation, the gap analysis and the on-device coach need no key and ' +
-                'no internet. A key only adds the two features below, which need Google.',
+              : 'Your logs, every calculation and the “what you’re missing” analysis need no ' +
+                'key and no internet. A key only adds the two features below, which run on ' +
+                'Google.',
           }),
         ]),
       );
@@ -43,8 +45,8 @@
       body.appendChild(
         V.ui.list([
           V.ui.row({
-            title: 'Cloud coach',
-            sub: 'Much better answers than a phone-sized model — but your summary goes to Google',
+            title: 'Coach',
+            sub: 'Ask about meals, training and studying — your summary goes to Google',
             value: hasKey ? '✓' : '—',
           }),
           V.ui.row({

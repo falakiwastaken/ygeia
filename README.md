@@ -6,11 +6,11 @@ study and body composition in one app — a free alternative to closed-source tr
 **Your health data never leaves your device.** No account, no server, no analytics, no
 tracking. Everything you log is stored in your browser's local database.
 
-Two optional features do talk to the internet, both off until you turn them on, and neither
-sends anything you have logged: **study photo help** (a photo of a homework question goes to
-Google) and the **on-device coach** (downloads a model, then runs locally). Ordinary food
-search queries Open Food Facts, and the Nearby map uses OpenStreetMap. Settings lists every
-one of these in full.
+Two optional features talk to the internet, both off until you turn them on and both needing
+a free Google API key you supply: **study photo help** (a photo of a homework question goes
+to Google, never your health data) and the **coach** (which does send a summary of what you
+have logged — the one feature that does). Ordinary food search queries Open Food Facts, and
+the Nearby map uses OpenStreetMap. Settings lists every one of these in full.
 
 Soft parchment-and-sage theme by default, with a forest-night dark mode.
 
@@ -129,11 +129,19 @@ Soft parchment-and-sage theme by default, with a forest-night dark mode.
   Google Gemini key and sends only the photo and your note — never health data, which is
   enforced in code rather than promised in prose (see `js/ai-vision.js`)
 
-**On-device coach** *(optional, off by default)*
-- A small language model that runs in your browser, downloaded only if you ask for it
-- Once installed, nothing you type leaves the device
+**Coach** *(optional, off by default, needs your own key)*
+- Ask about meals, training and studying. It refuses anything medical.
+- **This one does send your health data** — a short summary plus your upcoming calendar
+  notes. It stays off until you explicitly turn it on, and says exactly what it sends.
 - It narrates figures the deterministic engines already computed — it never calculates a
-  number you see
+  number you see. "You are 57 g short of 167 g" is arithmetic from `js/domain-gaps.js`,
+  computed on your device with no key and no network; the model only puts sentences round it.
+
+**What you're missing** *(no key, no internet, always on)*
+- Compares what you logged against published guidelines and shows the shortfall: protein per
+  kg, fibre per 1000 kcal, sleep, WHO weekly activity and strength frequency
+- Every figure is tappable through to the guideline it came from
+- Population guidelines only — it never interprets a symptom or a clinical measurement
 
 **Data**
 - Import your Apple Health export (see below)
@@ -259,12 +267,13 @@ lockfile rot, and it will still run unchanged in ten years. For an app whose mai
 that it holds your health data locally and forever, that seemed worth more than developer
 convenience.
 
-One honest caveat: the optional on-device coach imports WebLLM from a CDN, so *if you turn
-that on* there is third-party code in the page. It is not version-pinned, because ES module
-imports cannot carry an integrity hash. The mitigation is the Content-Security-Policy in
-`index.html`, which enumerates every host the page may connect to — substituted code would
-still have nowhere to send anything. Leave the coach off and the app remains entirely
-first-party.
+There is no third-party code in the page at all. `script-src` is `'self'` and nothing else —
+every line that executes came from this repository. Ygeia briefly shipped an optional
+on-device model that imported WebLLM from a CDN; that code ran in this origin with full
+IndexedDB access and could not be version-pinned, because ES module imports cannot carry an
+integrity hash. It was removed rather than mitigated. The Content-Security-Policy in
+`index.html` then enumerates every host the page may connect to, so even a scripting bug
+would have nowhere to send what it read.
 
 ## Contributing
 
