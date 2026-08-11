@@ -116,7 +116,8 @@
 
     V.$('#btn-prev-day').addEventListener('click', () => app.setDate(V.addDays(app.state.date, -1)));
     V.$('#btn-next-day').addEventListener('click', () => app.setDate(V.addDays(app.state.date, 1)));
-    V.$('#btn-date').addEventListener('click', () => app.setDate(V.today()));
+    // The date in the header is the natural way into the calendar.
+    V.$('#btn-date').addEventListener('click', () => V.calendar.open(app.state.date));
 
     V.$('#sheet-close').addEventListener('click', () => V.ui.closeSheet());
     V.$('#sheet-backdrop').addEventListener('click', (e) => {

@@ -507,6 +507,36 @@
         );
       }
 
+      // ---- On-device coach ----------------------------------------------------
+      root.appendChild(V.ui.sectionTitle('On-device coach'));
+      const localModel = await V.aiLocal.installedModel();
+      root.appendChild(
+        V.ui.list([
+          V.ui.row({
+            title: 'Local AI coach',
+            sub: localModel ? localModel.replace(/-MLC$/, '') : 'Not installed — optional, few hundred MB',
+            value: localModel ? 'On' : 'Off',
+            onClick: () => V.coachView.openManager(),
+          }),
+          localModel
+            ? V.ui.row({
+                title: 'Open the coach',
+                sub: 'Chat about your own data, entirely offline',
+                onClick: () => V.coachView.openChat(),
+              })
+            : null,
+        ].filter(Boolean)),
+      );
+      root.appendChild(
+        V.el('div', {
+          className: 'hint',
+          text: 'Optional. Ygeia ships with no dependencies; installing this pulls a runtime ' +
+                'and a model from the internet once, after which it runs on your device and ' +
+                'nothing you type leaves it. Every number it quotes comes from the ordinary ' +
+                'calculations — it is told not to invent figures.',
+        }),
+      );
+
       // ---- Study photo help ---------------------------------------------------
       root.appendChild(V.ui.sectionTitle('Study photo help'));
       root.appendChild(V.ui.list(await V.solveView.buildSettingsRows()));

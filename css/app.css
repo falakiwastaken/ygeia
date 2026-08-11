@@ -459,6 +459,142 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--info); outl
   box-shadow: var(--shadow-sm);
 }
 
+/* ============================================================== calendar == */
+
+.cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-3); }
+.cal-title { font-family: var(--font-display); font-size: 17px; font-weight: 600; }
+
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-dow { margin-bottom: 6px; }
+.cal-dow-cell {
+  text-align: center; font-size: 11px; font-weight: 600;
+  color: var(--text-faint); letter-spacing: .06em;
+}
+
+.cal-cell {
+  aspect-ratio: 1; border-radius: 10px;
+  border: 1px solid transparent; background: var(--surface-2);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  cursor: pointer; padding: 2px; color: var(--text);
+  font: inherit;
+  transition: background .15s ease, transform .1s ease, border-color .15s ease;
+}
+.cal-cell:active { transform: scale(.93); }
+.cal-cell.is-empty { background: none; color: var(--text-faint); }
+.cal-cell.is-today { border-color: var(--recovery); font-weight: 700; }
+.cal-cell.is-selected { background: var(--recovery); color: var(--on-accent); }
+.cal-cell.is-future { opacity: .35; cursor: default; }
+.cal-cell.cal-pad { background: none; border: 0; cursor: default; }
+
+.cal-num { font-size: 13px; font-variant-numeric: tabular-nums; line-height: 1; }
+.cal-dots { display: flex; gap: 2px; min-height: 5px; }
+.cal-dot { width: 5px; height: 5px; border-radius: 50%; display: inline-block; }
+
+.cal-legend {
+  display: flex; flex-wrap: wrap; gap: 10px;
+  margin-top: var(--sp-4); font-size: 11px; color: var(--text-faint);
+}
+.cal-legend-item { display: inline-flex; align-items: center; gap: 5px; }
+
+/* ============================================================== timeline == */
+
+.tl { position: relative; padding-left: 4px; }
+.tl-row { display: grid; grid-template-columns: 62px 14px 1fr; gap: var(--sp-2); padding-bottom: var(--sp-4); position: relative; }
+.tl-row:last-child { padding-bottom: 0; }
+
+/* The connecting spine, drawn behind the markers. */
+.tl-row:not(:last-child):after {
+  content: ''; position: absolute;
+  left: calc(62px + var(--sp-2) + 5px); top: 16px; bottom: -2px;
+  width: 1px; background: var(--border);
+}
+
+.tl-time {
+  font-size: 11px; color: var(--text-faint); text-align: right;
+  font-variant-numeric: tabular-nums; padding-top: 3px; white-space: nowrap;
+}
+.tl-marker {
+  width: 11px; height: 11px; border-radius: 50%; margin-top: 4px;
+  box-shadow: 0 0 0 3px var(--surface); z-index: 1;
+}
+.tl-body { min-width: 0; }
+.tl-title { font-size: 14px; font-weight: 600; display: flex; justify-content: space-between; gap: var(--sp-2); }
+.tl-value { font-weight: 500; color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tl-detail { font-size: 12px; color: var(--text-faint); margin-top: 2px; line-height: 1.45; }
+
+/* Study photo help */
+.solve-preview {
+  width: 100%; max-height: 320px; object-fit: contain;
+  border-radius: var(--r-md); border: 1px solid var(--border);
+  background: var(--surface-2); margin-top: var(--sp-3);
+}
+.solve-answer {
+  white-space: pre-wrap; font-size: 14px; line-height: 1.65;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-md); padding: var(--sp-4); margin-top: var(--sp-3);
+}
+
+/* ================================================================== chat == */
+
+.chat-log {
+  max-height: 46vh; overflow-y: auto;
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  padding: var(--sp-2) 0;
+}
+.chat-msg {
+  max-width: 88%; padding: 10px var(--sp-3); border-radius: var(--r-md);
+  font-size: 14px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.chat-user { align-self: flex-end; background: var(--info); color: var(--on-accent); border-bottom-right-radius: 4px; }
+.chat-bot { align-self: flex-start; background: var(--surface-2); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+
+/* ================================================================ polish == */
+
+/*
+ * Interaction feedback. Everything tappable should acknowledge the tap — without it the
+ * app feels unresponsive on a phone even when it is fast.
+ */
+.row, .cal-cell, .lock-key, .chip, .btn, .set-done, .checkin-dot, .urine-swatch {
+  -webkit-user-select: none; user-select: none;
+}
+.row { transition: background .14s ease; }
+.chip { transition: background .14s ease, border-color .14s ease, color .14s ease, transform .1s ease; }
+.chip:active { transform: scale(.95); }
+.card { transition: box-shadow .2s ease; }
+
+/* Visible keyboard focus, without a permanent ring for mouse users. */
+:focus-visible {
+  outline: 2px solid var(--info);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.btn:focus-visible, .row:focus-visible, .cal-cell:focus-visible { outline-offset: -2px; }
+
+/* Momentum scrolling and a settled scrollbar inside sheets. */
+.sheet-body { scrollbar-width: thin; scrollbar-color: var(--surface-3) transparent; }
+.sheet-body::-webkit-scrollbar { width: 6px; }
+.sheet-body::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 999px; }
+.sheet-body::-webkit-scrollbar-track { background: transparent; }
+
+/* Long words and pasted URLs must not force the layout sideways. */
+.row-title, .row-sub, .card-sub, .tl-detail, .insight-body { overflow-wrap: anywhere; }
+
+/* Wide content scrolls inside itself rather than pushing the page. */
+.formula, .solve-answer { max-width: 100%; }
+
+/*
+ * Respect the OS setting. Vestibular disorders are a real accessibility concern and this
+ * app animates a lot of sheets.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* Card builder rows — the Quizlet-style list editor */
 .fc-row {
   background: var(--surface);
