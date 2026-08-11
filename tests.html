@@ -812,6 +812,33 @@
   t('summarise handles the empty case',
     V.gaps.summarise([]) === 'Nothing obviously missing.' ? 1 : 0, 1);
 
+  group('Gaps — falling behind on revision');
+  const behind = (subs) => V.gaps.find({ settings: {}, subjectsBehind: subs });
+  const maths = behind([{ name: 'Maths', remainingHours: 12, daysLeft: 2 }])[0];
+  t('a subject behind schedule is a gap', maths ? 1 : 0, 1);
+  t('keyed per subject so two can coexist', maths.key === 'study:Maths' ? 1 : 0, 1);
+  t('labelled with the subject name', maths.label === 'Maths' ? 1 : 0, 1);
+  t('exam within 3 days is high severity', maths.severity === 'high' ? 1 : 0, 1);
+  t('exam further out is medium',
+    behind([{ name: 'Physics', remainingHours: 20, daysLeft: 9 }])[0].severity === 'medium' ? 1 : 0, 1);
+  // Whole hours print without a trailing ".0" — "12 hours" reads better than "12.0 hours".
+  t('message states the hours left', /\b12 hours/.test(maths.message) ? 1 : 0, 1);
+  t('part hours keep one decimal',
+    /\b7\.5 hours/.test(behind([{ name: 'Chem', remainingHours: 7.5, daysLeft: 2 }])[0].message) ? 1 : 0, 1);
+  t('message states the days left', /2 day/.test(maths.message) ? 1 : 0, 1);
+  t('two subjects give two gaps', behind([
+    { name: 'Maths', remainingHours: 12, daysLeft: 2 },
+    { name: 'Physics', remainingHours: 8, daysLeft: 9 },
+  ]).length, 2);
+  t('the urgent exam sorts first', behind([
+    { name: 'Physics', remainingHours: 8, daysLeft: 9 },
+    { name: 'Maths', remainingHours: 12, daysLeft: 2 },
+  ])[0].label === 'Maths' ? 1 : 0, 1);
+  // No numeric shortfall — hours behind is not a guideline, so the card shows no "−N".
+  t('carries no numeric shortfall', maths.short == null ? 1 : 0, 1);
+  t('and cites no guideline', maths.source == null ? 1 : 0, 1);
+  t('nothing behind -> no study gaps', behind([]).length, 0);
+
   group('Coach scope');
   // The coach must never differ between backends about what it will answer.
   t('scope covers food prep, training and studying',

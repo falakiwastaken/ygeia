@@ -253,10 +253,16 @@
       // opinion. It works with no AI installed; the coach just narrates the same figures.
       const gaps = await V.coachView.findGaps();
       if (gaps.length) {
+        // Never truncate away a high-severity gap. A fixed slice(0, 4) hid "exam in two
+        // days" behind four routine shortfalls, because study gaps sort last among equals.
+        // Gaps arrive severity-sorted, so widening the cut to cover them all is enough.
+        const highs = gaps.filter((g) => g.severity === 'high').length;
+        const show = Math.min(Math.max(4, highs), 6);
+
         root.appendChild(V.ui.sectionTitle('What you’re missing'));
         root.appendChild(
           V.ui.list(
-            gaps.slice(0, 4).map((g) =>
+            gaps.slice(0, show).map((g) =>
               V.ui.row({
                 title: g.label,
                 sub: g.message,
