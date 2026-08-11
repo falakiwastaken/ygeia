@@ -40,6 +40,8 @@
 <script src="js/domain-plan.js"></script>
 <script src="js/domain-insights.js"></script>
 <script src="js/domain-timeline.js"></script>
+<script src="js/domain-gaps.js"></script>
+<script src="js/ai-prompt.js"></script>
 <script src="js/map.js"></script>
 <script src="js/data-foods.js"></script>
 <script src="js/data-exercises.js"></script>
@@ -738,6 +740,86 @@
   t('untrained lifts start at the bottom of the range', session[0].reps, prog.days[0].exercises[0].repMin);
   t('adherence caps at 100%',
     V.plan.programAdherence(prog, Date.now() - 7 * 86400000, 99).pct, 100);
+
+  // =====================================================================
+  group('Gaps — guideline targets');
+  t('cutting raises protein to 2.2 g/kg', V.gaps.proteinPerKg('cut'), 2.2);
+  t('maintaining stays at 1.8', V.gaps.proteinPerKg('maintain'), 1.8);
+  t('lean bulk stays at 1.8', V.gaps.proteinPerKg('lean_bulk'), 1.8);
+  // 76 kg cutting: 76 * 2.2 = 167.2 -> 167 g
+  t('76kg cutting asks for 167 g', Math.round(76 * V.gaps.proteinPerKg('cut')), 167);
+  t('fibre is 14 g per 1000 kcal', V.gaps.FIBRE_PER_1000_KCAL, 14);
+  t('sleep floor is 7 hours', V.gaps.SLEEP_MIN_HOURS, 7);
+
+  const gapFor = (key, d) => V.gaps.find(d).find((g) => g.key === key);
+  const gapBase = { settings: { weightKg: 76, goal: 'cut' } };
+
+  group('Gaps — protein');
+  // Fires below 85% of target: 0.85 * 167 = 141.95
+  const pShort = gapFor('protein', { ...gapBase, todayTotals: { protein: 110 } });
+  t('110 g against 167 g is a gap', pShort ? 1 : 0, 1);
+  t('reports the shortfall', pShort.short, 57);
+  t('severity from the ratio (110/167 = 0.66)', pShort.severity === 'medium' ? 1 : 0, 1);
+  t('under 60% is high', gapFor('protein', { ...gapBase, todayTotals: { protein: 80 } }).severity === 'high' ? 1 : 0, 1);
+  t('150 g is close enough to not nag', gapFor('protein', { ...gapBase, todayTotals: { protein: 150 } }) ? 1 : 0, 0);
+  t('no weight logged -> no protein target',
+    gapFor('protein', { settings: {}, todayTotals: { protein: 10 } }) ? 1 : 0, 0);
+  t('cutting message explains why', /protects muscle/.test(pShort.message) ? 1 : 0, 1);
+  t('every gap cites a source or is explicitly internal',
+    V.gaps.find({ ...gapBase, todayTotals: { protein: 110 } }).every((g) => 'source' in g) ? 1 : 0, 1);
+
+  group('Gaps — fibre, sleep, activity');
+  // 2000 kcal -> 28 g target, fires below 70% (19.6 g)
+  const fibGap = gapFor('fibre', { settings: {}, todayTotals: { kcal: 2000, fiber: 12 } });
+  t('12 g against a 28 g target is a gap', fibGap.short, 16);
+  t('20 g clears the threshold',
+    gapFor('fibre', { settings: {}, todayTotals: { kcal: 2000, fiber: 20 } }) ? 1 : 0, 0);
+  t('barely eaten -> no fibre judgement',
+    gapFor('fibre', { settings: {}, todayTotals: { kcal: 300, fiber: 0 } }) ? 1 : 0, 0);
+
+  const nights = [{ hours: 6 }, { hours: 6.2 }, { hours: 5.8 }, { hours: 6.5 }]; // avg 6.125
+  t('6.1 h average is short of 8 by 1.9',
+    gapFor('sleep', { settings: {}, recentSleep: nights }).short, 1.9);
+  t('two nights is too little to judge',
+    gapFor('sleep', { settings: {}, recentSleep: nights.slice(0, 2) }) ? 1 : 0, 0);
+  t('sleeping 8 h is not a gap',
+    gapFor('sleep', { settings: {}, recentSleep: [{ hours: 8 }, { hours: 8 }, { hours: 8 }] }) ? 1 : 0, 0);
+
+  t('no strength work at all is high severity',
+    gapFor('strength', { settings: {}, strengthSessions7: 0 }).severity === 'high' ? 1 : 0, 1);
+  t('one session is one short', gapFor('strength', { settings: {}, strengthSessions7: 1 }).short, 1);
+  t('three sessions clears the guideline',
+    gapFor('strength', { settings: {}, strengthSessions7: 3 }) ? 1 : 0, 0);
+  t('200 MET-min is 300 short of 500', gapFor('activity', { settings: {}, metMinutes7: 200 }).short, 300);
+  t('logging 3 of 7 days is flagged', gapFor('logging', { settings: {}, daysLogged7: 3 }).short, 4);
+  t('logging 6 of 7 days is not', gapFor('logging', { settings: {}, daysLogged7: 6 }) ? 1 : 0, 0);
+
+  group('Gaps — ordering and empty state');
+  const mixed = V.gaps.find({
+    settings: { weightKg: 76, goal: 'cut' },
+    todayTotals: { kcal: 2000, protein: 150, fiber: 26 },
+    strengthSessions7: 0,          // high
+    daysLogged7: 4,                // medium
+  });
+  t('most severe first', mixed[0].severity === 'high' ? 1 : 0, 1);
+  t('less severe after', mixed[mixed.length - 1].severity === 'medium' ? 1 : 0, 1);
+  t('nothing missing -> empty list', V.gaps.find({
+    settings: { weightKg: 76, goal: 'maintain' },
+    todayTotals: { kcal: 2000, protein: 140, fiber: 30 },
+    recentSleep: [{ hours: 8 }, { hours: 8 }, { hours: 8 }],
+    strengthSessions7: 3, metMinutes7: 900, daysLogged7: 7,
+  }).length, 0);
+  t('summarise handles the empty case',
+    V.gaps.summarise([]) === 'Nothing obviously missing.' ? 1 : 0, 1);
+
+  group('Coach scope');
+  // The coach must never differ between backends about what it will answer.
+  t('scope covers food prep, training and studying',
+    /Food preparation[\s\S]*Training[\s\S]*Studying/.test(V.COACH_PROMPT) ? 1 : 0, 1);
+  t('refuses medical questions', /REFUSE ANYTHING MEDICAL/.test(V.COACH_PROMPT) ? 1 : 0, 1);
+  t('may explain calculated gaps', /WHAT IS MISSING/.test(V.COACH_PROMPT) ? 1 : 0, 1);
+  t('must not invent numbers', /Never estimate, compute or/.test(V.COACH_PROMPT) ? 1 : 0, 1);
+  t('the UI states the same scope', (V.COACH_SCOPE_NOTE || '').length > 40 ? 1 : 0, 1);
 
   // =====================================================================
   const summary = document.createElement('div');

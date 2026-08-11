@@ -4,6 +4,42 @@
 
   V.views = V.views || {};
 
+  /** Where a gap came from, so the guideline is checkable rather than asserted. */
+  function openGapSheet(gap) {
+    V.ui.sheet(gap.label, (body) => {
+      body.appendChild(
+        V.el('div', {
+          className: gap.severity === 'high' ? 'warn-box' : 'good-box',
+          text: gap.message,
+        }),
+      );
+
+      if (gap.target != null) {
+        body.appendChild(
+          V.el('div', { className: 'grid-2', style: { marginTop: '12px' } }, [
+            V.ui.stat({ label: 'You', value: String(gap.actual), unit: gap.unit }),
+            V.ui.stat({ label: 'Guideline', value: String(gap.target), unit: gap.unit }),
+          ]),
+        );
+      }
+
+      if (gap.source) {
+        body.appendChild(V.ui.sectionTitle('Where this comes from'));
+        body.appendChild(V.el('div', { className: 'hint', text: gap.source }));
+      }
+
+      body.appendChild(
+        V.el('div', {
+          className: 'hint',
+          style: { marginTop: '12px' },
+          text: 'This is a general population guideline compared against what you logged. ' +
+                'It is not advice about your health, and nothing here interprets a symptom ' +
+                'or a medical result.',
+        }),
+      );
+    });
+  }
+
   V.views.today = {
     async render(state) {
       const date = state.date;
@@ -209,6 +245,33 @@
             sub: `Target ${V.fmt(targets.kcal)} kcal`,
             children: [V.charts.bars(bars, { target: targets.kcal, color: 'var(--nutrition)' })],
           }),
+        );
+      }
+
+      // ---- What you're missing ----------------------------------------------
+      // Deterministic: each gap is a subtraction against a cited guideline, not an
+      // opinion. It works with no AI installed; the coach just narrates the same figures.
+      const gaps = await V.coachView.findGaps();
+      if (gaps.length) {
+        root.appendChild(V.ui.sectionTitle('What you’re missing'));
+        root.appendChild(
+          V.ui.list(
+            gaps.slice(0, 4).map((g) =>
+              V.ui.row({
+                title: g.label,
+                sub: g.message,
+                value: g.short != null ? '−' + g.short + g.unit : '',
+                accessory: V.el('span', {
+                  className: 'subject-dot',
+                  style: {
+                    background: g.severity === 'high' ? 'var(--bad)'
+                      : g.severity === 'medium' ? 'var(--warn)' : 'var(--text-faint)',
+                  },
+                }),
+                onClick: () => openGapSheet(g),
+              }),
+            ),
+          ),
         );
       }
 

@@ -37,9 +37,12 @@
                   async (v) => {
                     if (v && !V.confirm(
                       'Turn on the cloud coach?\n\n' +
-                      'Your calories, weight, sleep and training summary will be sent to ' +
-                      'Google each time you ask a question. On the free tier that content ' +
-                      'may be used for training and seen by human reviewers.',
+                      'Sent to Google with every question: your calorie and protein totals, ' +
+                      'food quality score, weight trend, workout count, the gaps Ygeia has ' +
+                      'calculated (including sleep), and your next few calendar notes — so ' +
+                      'do not write anything private in those.\n\n' +
+                      'On the free tier that content may be used for training and seen by ' +
+                      'human reviewers.',
                     )) { V.ui.refreshSheet(); return; }
                     await V.aiCloud.setEnabled(v);
                     V.ui.refreshSheet();
@@ -55,8 +58,8 @@
         V.el('div', {
           className: cloudOn ? 'danger-box' : 'hint',
           text: cloudOn
-            ? 'Your health summary is sent to Google on every question. Turn this off to keep ' +
-              'everything on your phone.'
+            ? 'Your daily summary and upcoming calendar notes are sent to Google on every ' +
+              'question. Turn this off to keep everything on your phone.'
             : 'Far better answers than anything that fits on a phone, but unlike the rest of ' +
               'Ygeia it sends your health summary off the device.',
         }),
@@ -234,12 +237,12 @@
     const settings = await V.store.settings.get();
     const targets = V.domain.macroTargets(settings);
 
-    const [entries, workouts, sleepLog, notes, weightDaily] = await Promise.all([
+    const [entries, workouts, notes, weightDaily, gaps] = await Promise.all([
       V.store.foodLog.resolved(date),
       V.store.workouts.byDate(date),
-      V.store.sleep.byDate(date),
       V.store.notes.upcoming(7),
       V.store.metrics.daily('weight'),
+      C.findGaps(),
     ]);
 
     const totals = V.domain.sumNutrients(entries.map((e) => e.nutrients));
@@ -254,19 +257,67 @@
     ];
 
     if (scored.score != null) lines.push(`Food quality score today: ${scored.score}/100`);
-    if (sleepLog) lines.push(`Slept: ${V.fmt(sleepLog.hours, 1)} hours`);
     if (workouts.length) lines.push(`Workouts today: ${workouts.length}`);
-    // Upcoming notes give the model context it cannot infer — an exam changes what good
-    // advice looks like.
-    for (const n of notes.slice(0, 3)) {
-      lines.push(`Note for ${n.date}: ${n.text}`);
-    }
     if (trend && trend.reliable) {
       lines.push(`Weight trend: ${V.fmt(trend.perWeek, 2)} kg per week over ${trend.n} days`);
+    }
+    for (const n of notes.slice(0, 3)) lines.push(`Note for ${n.date}: ${n.text}`);
+
+    // The gaps arrive already computed against published guidelines. Handing them over as
+    // finished figures is what stops the model inventing a protein target of its own.
+    if (gaps.length) {
+      lines.push('', 'Gaps the app calculated against published guidelines:');
+      for (const g of gaps) {
+        lines.push(`- ${g.label}: ${g.message}` + (g.source ? ` [source: ${g.source}]` : ''));
+      }
     }
 
     return lines.join('\n');
   }
+
+  /**
+   * Gather what V.gaps needs. This lives here rather than in the domain layer because it
+   * reads storage; the analysis itself stays pure and testable.
+   */
+  C.findGaps = async function () {
+    const date = V.app.state.date;
+    const settings = await V.store.settings.get();
+    const week = V.lastNDays(7, date);
+
+    const [entries, allLogs, workouts, sports, sleepAll, subjects, studySessions] = await Promise.all([
+      V.store.foodLog.resolved(date),
+      V.store.db.all('foodLogs'),
+      V.store.workouts.all(),
+      V.store.sports.all(),
+      V.store.sleep.series(),
+      V.store.study.subjects(),
+      V.store.study.sessions(),
+    ]);
+
+    const minutesBySubject = {};
+    for (const s of studySessions) {
+      minutesBySubject[s.subjectId] = (minutesBySubject[s.subjectId] || 0) + (s.minutes || 0);
+    }
+    const dailyBudgetHours = (settings.dailyStudyMinutes || 180) / 60;
+    const subjectsBehind = subjects
+      .filter((s) => s.examDate && V.study.daysUntil(s.examDate) >= 0)
+      .map((s) => ({
+        name: s.name,
+        daysLeft: Math.max(1, V.study.daysUntil(s.examDate)),
+        remainingHours: Math.max(0, (s.targetHours || 20) - (minutesBySubject[s.id] || 0) / 60),
+      }))
+      .filter((s) => s.remainingHours > 0 && s.remainingHours / s.daysLeft > dailyBudgetHours);
+
+    return V.gaps.find({
+      settings,
+      todayTotals: V.domain.sumNutrients(entries.map((e) => e.nutrients)),
+      recentSleep: sleepAll.filter((s) => week.includes(s.date)),
+      strengthSessions7: workouts.filter((w) => w.finishedAt && week.includes(w.date)).length,
+      metMinutes7: V.life.metMinutes(sports.filter((s) => week.includes(s.date))),
+      daysLogged7: new Set(allLogs.filter((l) => week.includes(l.date)).map((l) => l.date)).size,
+      subjectsBehind,
+    });
+  };
 
   // ==================================================================== chat
 
@@ -285,13 +336,13 @@
         V.el('div', {
           className: useCloud ? 'warn-box' : 'hint',
           text: useCloud
-            ? 'Using Google. Your health summary is sent with each question.'
+            ? 'Using Google. Your daily summary and upcoming notes are sent with each question.'
             : 'Running on this device. Nothing you type leaves it.',
         }),
       );
 
       const log = V.el('div', { className: 'chat-log' });
-      const input = V.ui.input({ placeholder: 'Ask about your training, food or sleep' });
+      const input = V.ui.input({ placeholder: 'Ask about meals, training or studying' });
       const history = [];
 
       body.appendChild(log);
@@ -305,9 +356,8 @@
       body.appendChild(
         V.el('div', {
           className: 'hint',
-          text: 'Runs on this device — nothing you type is sent anywhere. It can only use the ' +
-                'figures Ygeia already calculated, and is told not to invent numbers. It is ' +
-                'not a doctor.',
+          text: V.COACH_SCOPE_NOTE + ' It can only use figures Ygeia has already calculated, ' +
+                'and is told never to work one out itself.',
         }),
       );
 
