@@ -171,15 +171,34 @@
     const settings = await V.store.settings.get();
     const week = V.lastNDays(7, date);
 
-    const [entries, allLogs, workouts, sports, sleepAll, subjects, studySessions] = await Promise.all([
-      V.store.foodLog.resolved(date),
-      V.store.db.all('foodLogs'),
-      V.store.workouts.all(),
-      V.store.sports.all(),
-      V.store.sleep.series(),
-      V.store.study.subjects(),
-      V.store.study.sessions(),
-    ]);
+    const [entries, allLogs, workouts, sports, sleepAll, sleepMetric, subjects, studySessions] =
+      await Promise.all([
+        V.store.foodLog.resolved(date),
+        V.store.db.all('foodLogs'),
+        V.store.workouts.all(),
+        V.store.sports.all(),
+        V.store.sleep.series(),
+        V.store.metrics.daily('sleep_hours'),
+        V.store.study.subjects(),
+        V.store.study.sessions(),
+      ]);
+
+    /*
+     * Sleep is written in two places and both are reachable from the UI.
+     *
+     * The Study tab's sleep tracker saves a full sleepLogs record and mirrors it into
+     * metrics; the Body tab saves only the sleep_hours metric. Reading sleepLogs alone
+     * meant anyone who logged sleep from Body got it charted in Body trends and then
+     * silently ignored by the gap analysis — the app knew they slept 5.5 hours and said
+     * nothing. Merge both, letting the richer sleepLogs record win on a shared date.
+     */
+    const hoursByDate = new Map();
+    for (const m of sleepMetric) hoursByDate.set(m.date, m.value);
+    for (const s of sleepAll) if (s.hours != null) hoursByDate.set(s.date, s.hours);
+
+    const recentSleep = week
+      .filter((d) => hoursByDate.has(d))
+      .map((d) => ({ date: d, hours: hoursByDate.get(d) }));
 
     const minutesBySubject = {};
     for (const s of studySessions) {
@@ -198,7 +217,7 @@
     return V.gaps.find({
       settings,
       todayTotals: V.domain.sumNutrients(entries.map((e) => e.nutrients)),
-      recentSleep: sleepAll.filter((s) => week.includes(s.date)),
+      recentSleep,
       strengthSessions7: workouts.filter((w) => w.finishedAt && week.includes(w.date)).length,
       metMinutes7: V.life.metMinutes(sports.filter((s) => week.includes(s.date))),
       daysLogged7: new Set(allLogs.filter((l) => week.includes(l.date)).map((l) => l.date)).size,

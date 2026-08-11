@@ -267,7 +267,7 @@
                 title: g.label,
                 sub: g.message,
                 value: g.short != null ? '−' + g.short + g.unit : '',
-                accessory: V.el('span', {
+                accessory: V.el('div', {
                   className: 'subject-dot',
                   style: {
                     background: g.severity === 'high' ? 'var(--bad)'
