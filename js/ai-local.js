@@ -8,10 +8,21 @@
  * Running a language model in a browser is not something you write yourself, so opting in
  * pulls WebLLM from a CDN and a model from Hugging Face.
  *
- * That trade is made ONLY when the user explicitly asks for it:
- *   - nothing here is imported until they tap to install
- *   - the exact download size is shown first
+ * That trade is made ONLY when the user goes looking for it:
+ *   - nothing here loads while using the rest of the app
+ *   - the exact download size is shown before any model is fetched
  *   - it can be deleted, and the space is genuinely reclaimed
+ *
+ * Be precise about the timing: the runtime is imported when the model PICKER is opened,
+ * not when a model is installed, because the picker reads the catalogue from the library
+ * itself. So merely opening "Local AI coach" to look at it already discloses your IP to
+ * the CDN. The UI says so.
+ *
+ * Known risk, stated plainly: this import is not version-pinned and ES modules cannot
+ * carry an integrity hash. Once loaded, that third-party code runs in Ygeia's origin with
+ * full access to IndexedDB. The Content-Security-Policy in index.html is the mitigation —
+ * it restricts where anything on this page may connect, so substituted code still has
+ * nowhere to send your data.
  *
  * Until then the app remains dependency-free and the default experience is unchanged.
  *

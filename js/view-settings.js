@@ -209,64 +209,155 @@
 
   // ============================================================ backup / wipe
 
-  async function exportBackup() {
-    const stores = ['foods', 'foodLogs', 'recipes', 'exercises', 'templates', 'workouts', 'sets', 'metrics', 'kv'];
-    const data = { format: 'ygeia-backup', version: 1, exportedAt: new Date().toISOString(), stores: {} };
-    for (const s of stores) data.stores[s] = await V.store.db.all(s);
+  function openBackupSheet() {
+    V.ui.sheet('Back up', async (body) => {
+      const payload = await V.backup.collect();
+      const counts = V.backup.counts(payload);
+      const days = await V.backup.daysSinceBackup();
 
-    const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = V.el('a', { href: url, download: `ygeia-backup-${V.today()}.json` });
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    // Revoke on the next tick — revoking synchronously can cancel the download in Safari.
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
-    V.toast('Backup downloaded');
+      body.appendChild(
+        V.el('div', { className: 'hint' }, [
+          document.createTextNode(
+            `${V.fmt(counts.total)} records across ${Object.keys(counts.byStore).length} ` +
+            'categories. ' +
+            (days == null ? 'You have never backed up.' : days === 0 ? 'Last backed up today.' : `Last backed up ${days} day(s) ago.`),
+          ),
+        ]),
+      );
+
+      // ---- Encrypted --------------------------------------------------------
+      body.appendChild(V.ui.sectionTitle('Encrypted (recommended)'));
+
+      if (!V.backup.available()) {
+        body.appendChild(
+          V.el('div', { className: 'warn-box', text: 'Encryption needs a secure context — open Ygeia over https:// or from localhost.' }),
+        );
+      } else {
+        const pass = V.ui.input({ type: 'password', placeholder: 'Passphrase (8+ characters)', autocomplete: 'new-password' });
+        const confirmPass = V.ui.input({ type: 'password', placeholder: 'Repeat it', autocomplete: 'new-password' });
+
+        body.appendChild(V.ui.field('Passphrase', pass));
+        body.appendChild(V.ui.field('Confirm', confirmPass));
+        body.appendChild(
+          V.ui.button('Download encrypted backup', async () => {
+            if (pass.value !== confirmPass.value) return V.toast('The passphrases do not match');
+            try {
+              const result = await V.backup.exportEncrypted(pass.value);
+              V.toast(`Backed up ${V.fmt(result.total)} records`);
+              V.ui.closeSheet();
+              V.app.render();
+            } catch (err) { V.toast(err.message); }
+          }, 'btn-primary'),
+        );
+        body.appendChild(
+          V.el('div', {
+            className: 'danger-box',
+            style: { marginTop: '12px' },
+            text: 'There is no way to recover this passphrase. Nobody holds a copy, because ' +
+                  'nobody holds your data. Forget it and the backup is unreadable.',
+          }),
+        );
+        body.appendChild(
+          V.el('div', {
+            className: 'hint',
+            text: 'Encrypted with AES-GCM under a PBKDF2 key. Safe to keep in iCloud, Drive ' +
+                  'or email — none of which you would want holding a readable health diary. ' +
+                  'The format is documented in js/backup.js so the data stays recoverable ' +
+                  'with a short script even if this app disappears.',
+          }),
+        );
+      }
+
+      // ---- Plain ------------------------------------------------------------
+      body.appendChild(V.ui.sectionTitle('Plain JSON'));
+      body.appendChild(
+        V.ui.button('Download unencrypted backup', async () => {
+          const result = await V.backup.exportPlain();
+          V.toast(`Backed up ${V.fmt(result.total)} records`);
+          V.ui.closeSheet();
+          V.app.render();
+        }, 'btn-ghost'),
+      );
+      body.appendChild(
+        V.el('div', {
+          className: 'hint',
+          text: 'Readable and easy to inspect or parse, but anyone who opens the file can ' +
+                'read your health diary. Keep it somewhere you control.',
+        }),
+      );
+
+      body.appendChild(
+        V.el('div', {
+          className: 'hint',
+          text: 'Neither file contains your passcode or API key — those are stripped, since ' +
+                'a backup is something people email to themselves.',
+        }),
+      );
+    });
   }
 
   function openRestoreSheet() {
-    V.ui.sheet('Restore backup', (body) => {
+    V.ui.sheet('Restore from a backup', (body) => {
       body.appendChild(
         V.el('div', {
           className: 'warn-box',
-          text: 'Restoring replaces everything currently in the app. Export a backup first ' +
-                'if you might want to come back to the current data.',
+          text: 'Restoring replaces everything currently in the app. Back up first if there ' +
+                'is anything here you want to keep. Your passcode is also removed — backups ' +
+                'deliberately do not contain it, so restoring one turns the lock off and you ' +
+                'will need to set it again.',
         }),
       );
 
       const input = V.el('input', { type: 'file', accept: '.json,application/json', style: { marginTop: '16px' } });
       const status = V.el('div', { className: 'hint' });
+      const passWrap = V.el('div');
+      body.appendChild(input);
+      body.appendChild(passWrap);
+      body.appendChild(status);
+
+      async function apply(payload) {
+        if (!V.confirm('Replace all current data with this backup?')) return;
+        const n = await V.backup.restore(payload);
+        await V.app.applyTheme();
+        V.ui.closeSheet();
+        V.toast(`Restored ${V.fmt(n)} records`);
+        V.app.render();
+      }
 
       input.addEventListener('change', async () => {
         const file = input.files && input.files[0];
         if (!file) return;
-        try {
-          const data = JSON.parse(await file.text());
-          // 'vitals-backup' was the tag before the app was renamed — still accepted so
-          // early backups keep restoring.
-          const ACCEPTED = ['ygeia-backup', 'Ygeia-backup', 'vitals-backup'];
-          if (!ACCEPTED.includes(data.format)) throw new Error('That is not a Ygeia backup file.');
-          if (!V.confirm('Replace all current data with this backup?')) return;
+        passWrap.innerHTML = '';
+        status.textContent = '';
 
-          for (const name in data.stores) {
-            if (!V.store.SCHEMA[name]) continue; // ignore stores from a future version
-            await V.store.db.clear(name);
-            if (data.stores[name].length) await V.store.db.putMany(name, data.stores[name]);
+        try {
+          const info = await V.backup.inspect(file);
+          const made = info.exportedAt ? new Date(info.exportedAt).toLocaleString() : 'unknown date';
+
+          if (!info.encrypted) {
+            status.textContent = `Plain backup from ${made}.`;
+            passWrap.appendChild(V.el('div', { style: { height: '10px' } }));
+            passWrap.appendChild(V.ui.button('Restore it', () => apply(info.payload), 'btn-primary'));
+            return;
           }
 
-          V.store.settings.invalidate();
-          await V.app.applyTheme();
-          V.ui.closeSheet();
-          V.toast('Backup restored');
-          V.app.render();
+          status.textContent = `Encrypted backup from ${made}.`;
+          const pass = V.ui.input({ type: 'password', placeholder: 'Passphrase', autocomplete: 'current-password' });
+          passWrap.appendChild(V.el('div', { style: { height: '10px' } }));
+          passWrap.appendChild(V.ui.field('Passphrase', pass));
+          passWrap.appendChild(
+            V.ui.button('Decrypt and restore', async () => {
+              try {
+                const payload = await V.backup.decrypt(info.envelope, pass.value);
+                await apply(payload);
+              } catch (err) { status.textContent = err.message; }
+            }, 'btn-primary'),
+          );
+          pass.addEventListener('keydown', (e) => { if (e.key === 'Enter') passWrap.querySelector('.btn').click(); });
         } catch (err) {
           status.textContent = err.message;
         }
       });
-
-      body.appendChild(input);
-      body.appendChild(status);
     });
   }
 
@@ -405,6 +496,23 @@
 
       // ---- Data -------------------------------------------------------------
       root.appendChild(V.ui.sectionTitle('Data'));
+
+      const reminder = await V.backup.reminderState();
+      const days = await V.backup.daysSinceBackup();
+
+      if (reminder.show) {
+        root.appendChild(
+          V.el('div', { className: reminder.urgent ? 'danger-box' : 'warn-box' }, [
+            V.el('div', { text: reminder.message }),
+            V.el('div', {
+              style: { marginTop: '6px' },
+              text: 'Ygeia has no server by design, so a backup is the only way to recover ' +
+                    'your data if this device is lost.',
+            }),
+          ]),
+        );
+      }
+
       root.appendChild(
         V.ui.list([
           V.ui.row({
@@ -412,15 +520,33 @@
             sub: 'Read your Health export file',
             onClick: openHealthImportSheet,
           }),
+          // One tap, no questions — the version people will actually use. The warning has
+          // to be here rather than only inside the encrypted sheet, since this is the row
+          // most people will tap.
           V.ui.row({
-            title: 'Export backup',
-            sub: 'Download everything as JSON',
-            onClick: exportBackup,
+            title: 'Download my data',
+            sub: (days == null ? 'Never backed up' : (days === 0 ? 'Backed up today' : `Last backup ${days} day(s) ago`)) +
+                 ' · unencrypted, readable by anyone who opens it',
+            value: reminder.urgent ? '!' : '↓',
+            onClick: async () => {
+              try {
+                const result = await V.backup.exportPlain();
+                V.toast(`Downloaded ${V.fmt(result.total)} records`);
+                V.app.render();
+              } catch (err) { V.toast(err.message); }
+            },
           }),
           V.ui.row({
-            title: 'Restore backup',
-            sub: 'Replace all data from a file',
+            title: 'Import data',
+            sub: 'Restore from a file you downloaded',
+            value: '↑',
             onClick: openRestoreSheet,
+          }),
+          V.ui.row({
+            title: 'Encrypted backup',
+            sub: 'Password-protected, safe for cloud storage',
+            value: '›',
+            onClick: openBackupSheet,
           }),
         ]),
       );
@@ -620,17 +746,51 @@
       );
 
       // ---- Privacy ----------------------------------------------------------
+      //
+      // This card must list EVERY outbound request the app can make. It previously
+      // claimed there was only one, which stopped being true as features were added —
+      // exactly the kind of drift that turns a privacy promise into a false statement.
+      // If you add a network call anywhere, add it here.
       root.appendChild(V.ui.sectionTitle('Privacy'));
       root.appendChild(
         V.ui.card({
           children: [
             V.el('div', {
               className: 'card-sub',
-              text: 'Everything you log is stored only in this browser, on this device. There is no ' +
-                    'account, no server and no analytics. The single network request the app can make ' +
-                    'is a food lookup to Open Food Facts when you search — and only then.',
+              text: 'Everything you log is stored only in this browser, on this device. There is ' +
+                    'no account, no server, no analytics and no tracking. Your health data is ' +
+                    'never sent anywhere.',
             }),
           ],
+        }),
+      );
+
+      root.appendChild(V.ui.sectionTitle('Everything that leaves this device'));
+      root.appendChild(
+        V.ui.list([
+          V.ui.row({
+            title: 'Food search',
+            sub: 'Open Food Facts — the words you type, when you search. Always on.',
+          }),
+          V.ui.row({
+            title: 'Map tiles & nearby places',
+            sub: 'OpenStreetMap — your approximate location, only when you open Nearby.',
+          }),
+          V.ui.row({
+            title: 'Study photo help',
+            sub: 'Google — the photo and your note, only when you tap to explain one. Off unless you add a key.',
+          }),
+          V.ui.row({
+            title: 'On-device coach download',
+            sub: 'jsDelivr and Hugging Face — code and model weights. Nothing is uploaded, and inference is local.',
+          }),
+        ]),
+      );
+      root.appendChild(
+        V.el('div', {
+          className: 'hint',
+          text: 'None of these carry your food logs, weights, workouts or notes. Everything ' +
+                'except food search is off until you use that feature.',
         }),
       );
 

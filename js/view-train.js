@@ -240,9 +240,17 @@
       );
     }
 
+    children.push(
+      V.el('div', {
+        className: 'hint',
+        text: 'Your own progress only. There is no leaderboard and nothing is shared — the ' +
+              'scale is a reference for how your lifts have moved, not a competition.',
+      }),
+    );
+
     return V.ui.card({
       title: tier.name,
-      sub: ev.rating == null ? 'Unranked' : 'Strength rank',
+      sub: ev.rating == null ? 'Not rated yet' : 'Your progress',
       action: V.el('div', { className: 'stat-value', style: { color: tier.color }, text: ev.rating == null ? '–' : String(ev.rating) }),
       children,
     });
@@ -351,10 +359,9 @@
       body.appendChild(
         V.el('div', {
           className: 'hint',
-          text: 'Rating measures strength against published standards for your bodyweight' +
+          text: 'Rating is measured against published strength standards for your bodyweight' +
                 (settings.sex === 'female' ? ' and sex' : '') +
-                '. It moves slowly, because real strength does. Both are computed on your ' +
-                'device from your own logs — nothing is compared to other users.',
+                '. It moves slowly, because real strength does.',
         }),
       );
     });

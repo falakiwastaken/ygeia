@@ -3,8 +3,14 @@
 A free, open-source, offline-first lifestyle tracker. Nutrition, lifting, sport, sleep,
 study and body composition in one app — a free alternative to closed-source trackers.
 
-**Your data never leaves your device.** No account, no server, no analytics, no tracking.
-Everything is stored in your browser's local database.
+**Your health data never leaves your device.** No account, no server, no analytics, no
+tracking. Everything you log is stored in your browser's local database.
+
+Two optional features do talk to the internet, both off until you turn them on, and neither
+sends anything you have logged: **study photo help** (a photo of a homework question goes to
+Google) and the **on-device coach** (downloads a model, then runs locally). Ordinary food
+search queries Open Food Facts, and the Nearby map uses OpenStreetMap. Settings lists every
+one of these in full.
 
 Soft parchment-and-sage theme by default, with a forest-night dark mode.
 
@@ -116,9 +122,23 @@ Soft parchment-and-sage theme by default, with a forest-night dark mode.
 - Each explanation has a "report a problem" button that opens a pre-filled GitHub issue
   containing the full working — so bug reports arrive reproducible
 
+**Study photo help** *(optional, off by default)*
+- Photograph a problem you are stuck on and get it worked through step by step
+- Save the result as a flashcard
+- **This is the only feature that sends anything to a third party.** It needs your own free
+  Google Gemini key and sends only the photo and your note — never health data, which is
+  enforced in code rather than promised in prose (see `js/ai-vision.js`)
+
+**On-device coach** *(optional, off by default)*
+- A small language model that runs in your browser, downloaded only if you ask for it
+- Once installed, nothing you type leaves the device
+- It narrates figures the deterministic engines already computed — it never calculates a
+  number you see
+
 **Data**
 - Import your Apple Health export (see below)
-- Full JSON backup and restore
+- One-tap download of everything, plus password-encrypted backups safe for cloud storage
+- Backup reminders, because with no server a backup is the only recovery path there is
 - One-tap erase
 
 ## Running it
@@ -235,9 +255,16 @@ rather than read back from the implementation.
 ## Why no framework?
 
 The entire app loads as static files with zero dependencies. That means no build step, no
-supply-chain risk, no lockfile rot, and it will still run unchanged in ten years. For an app
-whose main promise is that it holds your health data locally and forever, that seemed worth
-more than developer convenience.
+lockfile rot, and it will still run unchanged in ten years. For an app whose main promise is
+that it holds your health data locally and forever, that seemed worth more than developer
+convenience.
+
+One honest caveat: the optional on-device coach imports WebLLM from a CDN, so *if you turn
+that on* there is third-party code in the page. It is not version-pinned, because ES module
+imports cannot carry an integrity hash. The mitigation is the Content-Security-Policy in
+`index.html`, which enumerates every host the page may connect to — substituted code would
+still have nowhere to send anything. Leave the coach off and the app remains entirely
+first-party.
 
 ## Contributing
 

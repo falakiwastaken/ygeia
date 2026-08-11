@@ -369,8 +369,19 @@
   // Rendering
   // =========================================================================
 
-  /** Build a GitHub issue URL pre-filled with the full working. */
-  function reportUrl(spec) {
+  /**
+   * Build the bug report as text.
+   *
+   * This used to be stuffed into a GitHub issue URL as a query parameter. That was a
+   * privacy bug: `inputs` contains real body metrics — weight, height, body fat, age, sex
+   * — and simply CLICKING the link issued a GET carrying them to GitHub, where they landed
+   * in request logs whether or not the issue was ever submitted. The copy underneath even
+   * claimed nothing was sent until you submitted it.
+   *
+   * Now the report is copied to the clipboard and a blank issue form is opened, so the
+   * data only travels if the user pastes it and presses submit.
+   */
+  function reportText(spec) {
     const body = [
       '**Calculation:** ' + spec.title,
       '',
@@ -400,8 +411,7 @@
       `_App: ${location.origin}${location.pathname} · reported ${new Date().toISOString()}_`,
     ].join('\n');
 
-    return `${REPO}/issues/new?title=${encodeURIComponent('Calculation: ' + spec.title)}` +
-           `&body=${encodeURIComponent(body)}&labels=calculation`;
+    return body;
   }
 
   /** Render a spec as a sheet. */
@@ -438,22 +448,52 @@
       }
 
       body.appendChild(V.el('div', { style: { height: '20px' } }));
+
+      const reportBox = V.el('div');
       body.appendChild(
-        V.el('a', {
-          className: 'btn btn-danger',
-          href: reportUrl(spec),
-          target: '_blank',
-          rel: 'noopener noreferrer',
-          text: 'Report a problem with this calculation',
-          style: { textDecoration: 'none' },
-        }),
+        V.ui.button('Report a problem with this calculation', async () => {
+          const text = reportText(spec);
+          let copied = false;
+          try {
+            await navigator.clipboard.writeText(text);
+            copied = true;
+          } catch (err) {
+            /* Clipboard can be blocked; the text is shown below either way. */
+          }
+
+          reportBox.innerHTML = '';
+          reportBox.appendChild(
+            V.el('div', {
+              className: 'hint',
+              text: copied
+                ? 'Report copied. Paste it into the issue, check nothing personal is in it, then submit.'
+                : 'Clipboard was blocked — select and copy the text below, then paste it into the issue.',
+            }),
+          );
+          if (!copied) reportBox.appendChild(V.el('pre', { className: 'formula', text }));
+
+          reportBox.appendChild(V.el('div', { style: { height: '8px' } }));
+          reportBox.appendChild(
+            V.el('a', {
+              className: 'btn btn-danger',
+              // A blank form — no query string, so nothing personal is in the request.
+              href: REPO + '/issues/new',
+              target: '_blank',
+              rel: 'noopener noreferrer',
+              text: 'Open a blank GitHub issue',
+              style: { textDecoration: 'none' },
+            }),
+          );
+        }, 'btn-danger'),
       );
+      body.appendChild(reportBox);
       body.appendChild(
         V.el('div', {
           className: 'hint',
-          text: 'Opens a pre-filled GitHub issue containing the formula, your inputs and ' +
-                'every step above, so the problem can be reproduced exactly. Nothing is sent ' +
-                'until you submit it yourself — review it first and remove anything personal.',
+          text: 'The report contains the formula, your inputs and every step above, so the ' +
+                'problem can be reproduced. Those inputs include real body measurements, so ' +
+                'it is copied to your clipboard rather than put in a link — nothing reaches ' +
+                'GitHub until you paste it in and submit.',
         }),
       );
     });
