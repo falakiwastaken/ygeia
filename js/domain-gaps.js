@@ -23,16 +23,20 @@
   /**
    * Protein per kg of bodyweight.
    *
-   * Benefits plateau around 1.6 g/kg for muscle gain (Morton et al. 2018), but in an
-   * energy deficit the requirement rises — higher intakes preserve lean mass while losing
-   * fat (Helms et al. 2014; Murphy & Koehler 2022). Hence the goal-dependent target: the
-   * usual 1.8 becomes 2.2 when cutting, which is where "168 g" comes from for a 76 kg
-   * lifter rather than the 137 g a flat 1.8 would suggest.
+   * A flat 2.2 g/kg regardless of goal, matching the app's own macro target — a "what you
+   * are missing" figure that disagreed with the target on the same screen would just be
+   * confusing.
+   *
+   * Benefits for muscle gain plateau around 1.6 g/kg (Morton et al., BJSM 2018), and in a
+   * deficit higher intakes preserve lean mass while losing fat (Helms et al., IJSNEM 2014;
+   * Murphy & Koehler 2022). This used to vary by goal — 2.2 when cutting, 1.8 otherwise —
+   * but the split was hard to justify: the deficit case wants 2.2, and above the plateau
+   * the extra costs nothing in any case, so the simpler constant is also the safer one.
    */
-  G.proteinPerKg = function (goal) {
-    if (goal === 'cut') return 2.2;
-    if (goal === 'lean_bulk') return 1.8;
-    return 1.8;
+  G.PROTEIN_PER_KG = 2.2;
+
+  G.proteinPerKg = function () {
+    return G.PROTEIN_PER_KG;
   };
 
   /** Sleep. 7–9 hours for adults (AASM & Sleep Research Society consensus, 2015). */

@@ -20,10 +20,13 @@
   // v4 added decks and migrated review items from one-sided to front/back cards.
   // v5 added calendar notes.
   //
-  // The `checkIns` store is retained but no longer written to — the daily check-in was
-  // removed. It stays in the schema so anyone who used it keeps their history and their
-  // backups still restore. Dropping a store would silently destroy that.
-  const DB_VERSION = 5;
+  // v6 added notebooks and whiteboards.
+  //
+  // `checkIns` went unwritten for a while after the original daily check-in was removed,
+  // and was kept in the schema so nobody's history was destroyed. It is in use again for
+  // the stress and energy ratings, and old records are still readable — same shape, with
+  // fields that were not captured simply absent.
+  const DB_VERSION = 6;
 
   /** store name -> { keyPath, indexes: [[name, keyPath, opts]] } */
   const SCHEMA = {
@@ -48,6 +51,7 @@
 
     // --- v3 ---
     // checkIns is keyed by date: there is exactly one per day, so the date IS the identity.
+    // { date, stress: 1-5, energy: 1-5, at }
     checkIns:   { keyPath: 'date', indexes: [] },
     habits:     { keyPath: 'id', indexes: [] },
     habitLogs:  { keyPath: 'id', indexes: [['date', 'date'], ['habitId', 'habitId']] },
@@ -60,6 +64,18 @@
     // --- v5 ---
     // Free-text things the user writes on a day: "exam tomorrow", "felt awful".
     notes: { keyPath: 'id', indexes: [['date', 'date']] },
+
+    // --- v6 ---
+    // Long-form study capture. A notebook is a container; the pages hold the content.
+    // `kind` picks the editor — lined text, or a whiteboard you draw on.
+    // { id, name, subjectId|null, kind: 'text'|'draw', createdAt, updatedAt }
+    notebooks: { keyPath: 'id', indexes: [['subjectId', 'subjectId']] },
+    // { id, notebookId, index, kind, text, strokes, updatedAt }
+    notebookPages: { keyPath: 'id', indexes: [['notebookId', 'notebookId']] },
+
+    // One answered question of the day, keyed by date like checkIns.
+    // { date, questionId, answer, correct, answeredAt }
+    dailyAnswers: { keyPath: 'date', indexes: [] },
   };
 
   let dbPromise = null;
@@ -103,12 +119,84 @@
         }
       };
 
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-      req.onblocked = () => reject(new Error('Database blocked — close other Ygeia tabs and reload.'));
+      /*
+       * Blocked means another connection is still holding an older version open — a
+       * second tab, or the installed home-screen app running alongside the browser.
+       *
+       * This is NOT fatal and must not be treated as such. Every other connection gets
+       * an `onversionchange` event (wired below) telling it to let go, and the upgrade
+       * proceeds by itself the moment it does. Rejecting here immediately, as this used
+       * to, turned an ordinary second tab into a dead "Storage unavailable" screen on
+       * every schema change. So give the other tabs a moment to stand down, and only
+       * give up if one of them genuinely will not.
+       */
+      let blockedTimer = null;
+      req.onblocked = () => {
+        blockedTimer = setTimeout(() => {
+          const err = new Error(
+            'Ygeia is open somewhere else with an older version of its database, and it ' +
+            'has to close before this one can update. Close the app\'s other tabs and ' +
+            'windows — including the home-screen app if you installed it — then reload.',
+          );
+          err.name = 'BlockedError';
+          reject(err);
+        }, BLOCKED_GRACE_MS);
+      };
+
+      req.onsuccess = () => {
+        clearTimeout(blockedTimer);
+        const db = req.result;
+
+        /*
+         * Yield to a newer version opened elsewhere.
+         *
+         * Without this, an old tab left open in the background holds the previous schema
+         * forever and every newer tab is blocked indefinitely. Closing here is what makes
+         * an upgrade possible at all while the app is open twice, which — for something
+         * people pin to a home screen and also open in a browser — is the normal case,
+         * not an edge case.
+         */
+        db.onversionchange = () => {
+          db.close();
+          dbPromise = null;
+          if (typeof onSuperseded === 'function') onSuperseded();
+        };
+
+        resolve(db);
+      };
+
+      req.onerror = () => { clearTimeout(blockedTimer); reject(req.error); };
     });
-    return dbPromise;
+
+    /*
+     * Never cache a failure.
+     *
+     * `dbPromise` is memoised so the database is only opened once. If that promise
+     * rejects and is kept, every later call returns the same rejection for the life of
+     * the page — one transient failure (a blocked upgrade that has since cleared, a
+     * momentary quota error) and the app stays broken until it is reloaded, with each
+     * subsequent screen failing for a reason that has long stopped being true. Dropping
+     * it here lets the next caller genuinely retry.
+     *
+     * The identity check matters: a retry may already have replaced `dbPromise` with a
+     * live connection by the time this settles, and clearing that would throw away a
+     * working database.
+     */
+    const pending = dbPromise;
+    pending.catch(() => { if (dbPromise === pending) dbPromise = null; });
+
+    return pending;
   }
+
+  /** How long to let other tabs close before calling a blocked upgrade a failure. */
+  const BLOCKED_GRACE_MS = 3000;
+
+  /**
+   * Called when another tab upgrades the schema out from under this one. The connection
+   * is already closed by then, so the app has to reload rather than carry on writing.
+   */
+  let onSuperseded = null;
+  function setSupersededHandler(fn) { onSuperseded = fn; }
 
   function run(storeNames, mode, fn) {
     return open().then(
@@ -186,7 +274,12 @@
     weightKg: 75,
     activityLevel: 'moderate',
     goal: 'maintain',
-    proteinPerKg: 1.8,
+    // Grams per kg of bodyweight. See D.DEFAULT_PROTEIN_PER_KG in js/domain.js for why
+    // this sits at the top of the supported range rather than at the plateau.
+    proteinPerKg: 2.2,
+    // Aim at the bottom of the calorie estimate rather than its middle, to absorb
+    // under-logging. 0 = off. See D.DEFAULT_CALORIE_MARGIN in js/domain.js.
+    calorieMargin: 0,
     // Manual overrides. When null the targets are derived from the profile.
     kcalOverride: null,
     proteinOverride: null,
@@ -195,6 +288,7 @@
     // Display
     weightUnit: 'kg',      // 'kg' | 'lb'
     heightUnit: 'cm',      // 'cm' | 'in'
+    tempUnit: 'c',         // 'c' | 'f'
     energyUnit: 'kcal',
     theme: 'light',        // 'light' | 'dark' | 'auto' — light is the intended look
     firstDayOfWeek: 1,
@@ -210,6 +304,14 @@
     sleepTargetHours: 8,
     wakeTarget: '07:00',
     dailyStudyMinutes: 180,
+    // Difficulty of the daily question. 'foundation' | 'standard' | 'advanced'.
+    studyLevel: 'standard',
+    // Open the daily question by itself when the Study tab is opened.
+    dailyQuestionPopup: true,
+
+    // Hearing. A phone mic reports dBFS, which needs an offset to become dB SPL, and
+    // that offset is device-specific — see js/domain-sound.js. Calibratable in the meter.
+    micOffsetDb: 90,
 
     // Security. Only takes effect once a passcode is set.
     autoLockMinutes: 5,
@@ -439,13 +541,19 @@
     /**
      * One value per day, averaging same-day samples. Weight especially is often logged
      * more than once a day, and a daily mean is far less noisy than picking one reading.
+     *
+     * `aggregate` overrides how a day's values collapse, because an arithmetic mean is
+     * not always the right answer. Decibels are logarithmic: 60 dB and 90 dB average to
+     * 87, not 75, and treating them as 75 understates the day's noise exposure enormously.
+     * Pass V.sound.meanDb for those. Existing callers get the mean as before.
      */
-    async daily(type) {
+    async daily(type, aggregate) {
       const s = await metrics.series(type);
       const byDay = V.groupBy(s, 'date');
+      const collapse = aggregate || ((vals) => V.sum(vals) / vals.length);
       return Object.keys(byDay).sort().map((date) => ({
         date,
-        value: V.sum(byDay[date], (x) => x.value) / byDay[date].length,
+        value: collapse(byDay[date].map((x) => x.value)),
       }));
     },
   };
@@ -589,6 +697,69 @@
     },
   };
 
+  // -------------------------------------------------------------- notebooks --
+
+  const notebooks = {
+    all: () => db.all('notebooks'),
+    get: (id) => db.get('notebooks', id),
+    save: (nb) => db.put('notebooks', Object.assign({}, nb, { updatedAt: Date.now() })),
+    bySubject: (subjectId) => db.byIndex('notebooks', 'subjectId', subjectId),
+
+    /** Cascade, exactly as removeSubject does — orphan pages are unreachable otherwise. */
+    async remove(id) {
+      for (const p of await db.byIndex('notebookPages', 'notebookId', id)) {
+        await db.remove('notebookPages', p.id);
+      }
+      return db.remove('notebooks', id);
+    },
+
+    /** Pages of a notebook in reading order. */
+    async pages(notebookId) {
+      const rows = await db.byIndex('notebookPages', 'notebookId', notebookId);
+      return rows.sort((a, b) => (a.index || 0) - (b.index || 0));
+    },
+
+    savePage: (p) => db.put('notebookPages', Object.assign({}, p, { updatedAt: Date.now() })),
+    removePage: (id) => db.remove('notebookPages', id),
+
+    async pageCount(notebookId) {
+      const rows = await db.byIndex('notebookPages', 'notebookId', notebookId);
+      return rows.length;
+    },
+  };
+
+  // ---------------------------------------------------------- daily answers --
+
+  const dailyAnswers = {
+    all: () => db.all('dailyAnswers'),
+    byDate: (date) => db.get('dailyAnswers', date),
+    save: (a) => db.put('dailyAnswers', Object.assign({ answeredAt: Date.now() }, a)),
+  };
+
+  // -------------------------------------------------------------- check-ins --
+
+  /**
+   * How the day felt: self-rated stress and energy, 1–5.
+   *
+   * Keyed by date, so saving twice in a day updates rather than accumulates. This is
+   * deliberately kept apart from the physiological stress estimate in domain-vitals —
+   * they measure different things, and the disagreement between them is the useful part.
+   */
+  const checkIns = {
+    all: () => db.all('checkIns'),
+    byDate: (date) => db.get('checkIns', date),
+    remove: (date) => db.remove('checkIns', date),
+
+    save: (c) => db.put('checkIns', Object.assign({ at: Date.now() }, c)),
+
+    async range(startDate, endDate) {
+      const all = await db.all('checkIns');
+      return all
+        .filter((c) => c.date >= startDate && c.date <= endDate)
+        .sort((a, b) => (a.date < b.date ? -1 : 1));
+    },
+  };
+
   // ---------------------------------------------------------------- habits --
 
   const habits = {
@@ -644,7 +815,7 @@
   V.store = {
     db, settings, foods, foodLog, exercises, workouts, sets, templates, metrics,
     sports, sleep, study, cuts, places,
-    notes, habits, mealPlans, programs,
-    open, SCHEMA,
+    notes, habits, mealPlans, programs, checkIns, notebooks, dailyAnswers,
+    open, SCHEMA, setSupersededHandler, DB_VERSION,
   };
 })(window.V);

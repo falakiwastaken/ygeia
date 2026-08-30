@@ -144,6 +144,12 @@ window.V = window.V || {};
   V.cmToDisplay = (cm, unit) => (unit === 'in' ? cm / V.CM_PER_IN : cm);
   V.displayToCm = (v, unit) => (unit === 'in' ? v * V.CM_PER_IN : v);
 
+  // Temperature is stored in Celsius throughout. Unlike weight and length this is an
+  // affine conversion, not a scale factor — a 1 °C difference is 1.8 °F, but 0 °C is
+  // not 0 °F, so deltas must never be run through these.
+  V.cToDisplay = (c, unit) => (unit === 'f' ? c * 9 / 5 + 32 : c);
+  V.displayToC = (v, unit) => (unit === 'f' ? (v - 32) * 5 / 9 : v);
+
   /** Round a weight to the smallest increment that gym plates actually allow. */
   V.roundToIncrement = (kg, unit) => {
     const inc = unit === 'lb' ? 1.13398 : 1.25; // 2.5 lb or 2.5 kg total (both sides)

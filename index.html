@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en" data-theme="light">
 <head>
 <meta charset="utf-8">
@@ -11,7 +11,7 @@
   Content-Security-Policy.
 
   script-src is 'self' and nothing else. No CDN, no third-party code, no import() at
-  runtime — every line that executes here came from this repository. Ygeia briefly shipped
+  runtime — every line that executes here came from this repository. Ygeia briefly shipped
   an optional on-device model that pulled a runtime from a CDN; that code ran in this origin
   with full IndexedDB access and could not be pinned with an integrity hash, so removing it
   removed the only way untrusted code could ever reach your data.
@@ -33,7 +33,7 @@
     https://overpass-api.de
     https://nominatim.openstreetmap.org
     https://generativelanguage.googleapis.com
-    https://raw.githubusercontent.com;
+    https://api.anthropic.com;
   base-uri 'self';
   form-action 'none';
   object-src 'none';
@@ -47,7 +47,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 
-<link rel="stylesheet" href="css/app.css?v=20">
+<link rel="stylesheet" href="css/app.css?v=37">
 </head>
 <body>
 
@@ -104,7 +104,7 @@
       <div class="sheet-grabber"></div>
       <div class="sheet-head">
         <h2 id="sheet-title"></h2>
-        <button class="icon-btn" id="sheet-close" aria-label="Close">×</button>
+        <button class="icon-btn" id="sheet-close" aria-label="Close">×</button>
       </div>
       <div class="sheet-body" id="sheet-body"></div>
     </div>
@@ -122,49 +122,60 @@
   Deliberately NOT ES modules: <script type="module"> is blocked by CORS on file:// URLs,
   and this app must run by opening index.html with no server and no build step.
 -->
-<script src="js/util.js?v=20"></script>
-<script src="js/store.js?v=20"></script>
-<script src="js/auth.js?v=20"></script>
-<script src="js/domain.js?v=20"></script>
-<script src="js/domain-life.js?v=20"></script>
-<script src="js/domain-cut.js?v=20"></script>
-<script src="js/domain-study.js?v=20"></script>
-<script src="js/domain-rank.js?v=20"></script>
-<script src="js/domain-plan.js?v=20"></script>
-<script src="js/domain-insights.js?v=20"></script>
-<script src="js/domain-timeline.js?v=20"></script>
-<script src="js/domain-gaps.js?v=20"></script>
-<script src="js/data-meals.js?v=20"></script>
-<script src="js/data-programs.js?v=20"></script>
-<script src="js/explain.js?v=20"></script>
-<script src="js/data-foods.js?v=20"></script>
-<script src="js/data-exercises.js?v=20"></script>
-<script src="js/ui.js?v=20"></script>
-<script src="js/charts.js?v=20"></script>
-<script src="js/map.js?v=20"></script>
-<script src="js/openfoodfacts.js?v=20"></script>
-<script src="js/food-parser.js?v=20"></script>
-<script src="js/ai-prompt.js?v=20"></script>
-<script src="js/ai-vision.js?v=20"></script>
-<script src="js/ai-cloud.js?v=20"></script>
-<script src="js/places.js?v=20"></script>
-<script src="js/healthimport.js?v=20"></script>
-<script src="js/backup.js?v=20"></script>
-<script src="js/view-today.js?v=20"></script>
-<script src="js/view-food.js?v=20"></script>
-<script src="js/view-train.js?v=20"></script>
-<script src="js/view-study.js?v=20"></script>
-<script src="js/view-flashcards.js?v=20"></script>
-<script src="js/view-solve.js?v=20"></script>
-<script src="js/view-aikey.js?v=20"></script>
-<script src="js/view-calendar.js?v=20"></script>
-<script src="js/view-coach.js?v=20"></script>
-<script src="js/view-body.js?v=20"></script>
-<script src="js/view-cut.js?v=20"></script>
-<script src="js/view-plan.js?v=20"></script>
-<script src="js/view-lock.js?v=20"></script>
-<script src="js/view-onboard.js?v=20"></script>
-<script src="js/view-settings.js?v=20"></script>
-<script src="js/app.js?v=20"></script>
+<script src="js/util.js?v=37"></script>
+<script src="js/store.js?v=37"></script>
+<script src="js/auth.js?v=37"></script>
+<script src="js/domain.js?v=37"></script>
+<script src="js/domain-life.js?v=37"></script>
+<script src="js/domain-cut.js?v=37"></script>
+<script src="js/domain-study.js?v=37"></script>
+<script src="js/domain-rank.js?v=37"></script>
+<script src="js/domain-plan.js?v=37"></script>
+<script src="js/domain-insights.js?v=37"></script>
+<script src="js/domain-timeline.js?v=37"></script>
+<script src="js/domain-gaps.js?v=37"></script>
+<script src="js/domain-vitals.js?v=37"></script>
+<script src="js/domain-sound.js?v=37"></script>
+<script src="js/domain-load.js?v=37"></script>
+<script src="js/domain-notebook.js?v=37"></script>
+<script src="js/domain-features.js?v=37"></script>
+<script src="js/data-meals.js?v=37"></script>
+<script src="js/data-programs.js?v=37"></script>
+<script src="js/data-daily.js?v=37"></script>
+<script src="js/explain.js?v=37"></script>
+<script src="js/data-foods.js?v=37"></script>
+<script src="js/data-exercises.js?v=37"></script>
+<script src="js/ui.js?v=37"></script>
+<script src="js/charts.js?v=37"></script>
+<script src="js/map.js?v=37"></script>
+<script src="js/openfoodfacts.js?v=37"></script>
+<script src="js/food-parser.js?v=37"></script>
+<script src="js/ai-prompt.js?v=37"></script>
+<script src="js/ai-providers.js?v=37"></script>
+<script src="js/ai-vision.js?v=37"></script>
+<script src="js/ai-cloud.js?v=37"></script>
+<script src="js/places.js?v=37"></script>
+<script src="js/healthimport.js?v=37"></script>
+<script src="js/backup.js?v=37"></script>
+<script src="js/view-today.js?v=37"></script>
+<script src="js/view-food.js?v=37"></script>
+<script src="js/view-train.js?v=37"></script>
+<script src="js/view-study.js?v=37"></script>
+<script src="js/view-notebook.js?v=37"></script>
+<script src="js/view-features.js?v=37"></script>
+<script src="js/view-sound.js?v=37"></script>
+<script src="js/view-flashcards.js?v=37"></script>
+<script src="js/view-solve.js?v=37"></script>
+<script src="js/view-scandeck.js?v=37"></script>
+<script src="js/view-aikey.js?v=37"></script>
+<script src="js/view-calendar.js?v=37"></script>
+<script src="js/view-coach.js?v=37"></script>
+<script src="js/view-body.js?v=37"></script>
+<script src="js/view-cut.js?v=37"></script>
+<script src="js/view-plan.js?v=37"></script>
+<script src="js/view-lock.js?v=37"></script>
+<script src="js/view-onboard.js?v=37"></script>
+<script src="js/view-settings.js?v=37"></script>
+<script src="js/app.js?v=37"></script>
 </body>
 </html>

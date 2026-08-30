@@ -181,6 +181,11 @@
     studyMinutes:   { label: 'Study minutes', unit: 'min' },
     steps:          { label: 'Steps', unit: '' },
     weight:         { label: 'Weight', unit: 'kg' },
+    restingHr:      { label: 'Resting heart rate', unit: 'bpm' },
+    hrv:            { label: 'HRV', unit: 'ms' },
+    spo2:           { label: 'Blood oxygen', unit: '%' },
+    respiratoryRate:{ label: 'Respiratory rate', unit: 'br/min' },
+    bedroomTemp:    { label: 'Bedroom temperature', unit: '°C' },
   };
 
   /**

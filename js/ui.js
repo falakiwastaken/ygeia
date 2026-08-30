@@ -8,6 +8,12 @@
   // ---------------------------------------------------------------- sheet --
 
   let sheetStack = [];
+  /**
+   * The stack entry whose DOM is currently on screen. Tracked separately from the top of
+   * the stack because the two diverge for exactly as long as it takes to swap them, and
+   * that is the window in which teardown has to run.
+   */
+  let mounted = null;
 
   /**
    * Open a bottom sheet. `build` receives the body element and returns nothing.
@@ -15,27 +21,106 @@
    * previous sheet on close rather than dumping the user back to the root view.
    */
   ui.sheet = function (title, build, opts) {
-    const backdrop = V.$('#sheet-backdrop');
     const body = V.$('#sheet-body');
-    const titleEl = V.$('#sheet-title');
 
     if (sheetStack.length) {
       sheetStack[sheetStack.length - 1].scroll = body.scrollTop;
     }
-    sheetStack.push({ title, build, opts: opts || {}, scroll: 0 });
+    sheetStack.push({ title, build, opts: opts || {}, scroll: 0, teardown: [] });
     renderSheet();
   };
+
+  /**
+   * Register cleanup for the sheet being built right now.
+   *
+   * Anything a builder starts that outlives a paint — a timer, an animation frame loop,
+   * a microphone stream — has to be stoppable, and the sheet can go away by six different
+   * routes (the × button, the backdrop, Escape, a nested sheet opening, a refresh, the
+   * auto-lock). Registering here covers all of them; remembering to clear it in one
+   * particular button handler does not.
+   */
+  ui.onSheetTeardown = function (fn) {
+    const top = sheetStack[sheetStack.length - 1];
+    if (top) top.teardown.push(fn);
+  };
+
+  function unmount() {
+    if (!mounted) return;
+    const fns = mounted.teardown;
+    mounted.teardown = [];
+    mounted = null;
+    for (const fn of fns) {
+      // One broken cleanup must not strand the others — a mic left recording is worse
+      // than a swallowed error.
+      try { fn(); } catch (err) { console.error('sheet teardown failed', err); }
+    }
+  }
+
+  /**
+   * Show a failed sheet as a failure, rather than as nothing.
+   *
+   * Whatever the builder managed to render before it threw is discarded on purpose. A
+   * half-built sheet is worse than an empty one — a Save button whose inputs never got
+   * appended looks operable and is not — so the partial UI goes and an explanation with
+   * a retry takes its place.
+   */
+  function showSheetError(body, err) {
+    console.error('[Ygeia] sheet failed to build:', err);
+    body.innerHTML = '';
+    body.appendChild(
+      el('div', { className: 'warn-box' }, [
+        el('div', { html: '<strong>This didn’t load.</strong>' }),
+        el('div', {
+          style: { marginTop: '6px' },
+          text: String(err && err.message ? err.message : err),
+        }),
+      ]),
+    );
+    body.appendChild(el('div', { style: { height: '12px' } }));
+    body.appendChild(ui.button('Try again', () => ui.refreshSheet(), 'btn-primary'));
+    body.appendChild(
+      el('div', {
+        className: 'hint',
+        text: 'If it keeps failing, reload the app. Nothing has been deleted.',
+      }),
+    );
+  }
 
   function renderSheet() {
     const backdrop = V.$('#sheet-backdrop');
     const body = V.$('#sheet-body');
     const top = sheetStack[sheetStack.length - 1];
+
+    unmount();
     if (!top) { backdrop.hidden = true; return; }
 
     V.$('#sheet-title').textContent = top.title;
     body.innerHTML = '';
     backdrop.hidden = false;
-    top.build(body);
+    mounted = top;
+
+    /*
+     * Builders are routinely async — nearly all of them read from IndexedDB first. An
+     * unhandled rejection in one used to leave the sheet sitting there blank and silent,
+     * which reads as the app having swallowed the tap. Both failure modes are caught:
+     * a synchronous throw, and a rejected promise.
+     */
+    let result;
+    try {
+      result = top.build(body);
+    } catch (err) {
+      showSheetError(body, err);
+      return;
+    }
+    if (result && typeof result.catch === 'function') {
+      result.catch((err) => {
+        // Only report if this sheet is still the one on screen; by the time a slow
+        // builder fails the user may well have moved on, and hijacking whatever they
+        // opened next would be worse than staying quiet.
+        if (mounted === top) showSheetError(body, err);
+        else console.error('[Ygeia] sheet failed after dismissal:', err);
+      });
+    }
     body.scrollTop = top.scroll || 0;
   }
 
@@ -44,6 +129,7 @@
     if (all) sheetStack = [];
     else sheetStack.pop();
     if (!sheetStack.length) {
+      unmount();
       V.$('#sheet-backdrop').hidden = true;
       V.$('#sheet-body').innerHTML = '';
     } else {
@@ -136,11 +222,12 @@
 
   // ----------------------------------------------------------------- rows --
 
+  /** `subColor` tints the subtitle — used to show an interpretation band in its colour. */
   ui.row = function (o) {
     const node = el(o.onClick ? 'button' : 'div', { className: 'row', type: 'button' }, [
       el('div', { className: 'row-main' }, [
         el('div', { className: 'row-title', text: o.title }),
-        o.sub ? el('div', { className: 'row-sub', text: o.sub }) : null,
+        o.sub ? el('div', { className: 'row-sub', text: o.sub, style: o.subColor ? { color: o.subColor } : null }) : null,
       ]),
       o.value != null ? el('div', { className: 'row-value', text: o.value }) : null,
       o.accessory || null,
@@ -170,6 +257,42 @@
         ])
       : null;
     return el('div', { className: 'card' }, [head].concat(o.children || []));
+  };
+
+  /**
+   * A grid of tiles for "open a thing" destinations.
+   *
+   * Several places had grown a run of cards that were each a title, a line of subtitle and
+   * one full-width button — structurally identical, so a screen of them reads as a stack of
+   * grey rectangles and nothing looks more important than anything else. A card should earn
+   * its width by holding something: a number, a chart, a state. A door does not, and belongs
+   * in a grid with the other doors.
+   *
+   * @param {Array} items [{ icon, label, sub, accent, onClick }]
+   */
+  ui.tiles = function (items) {
+    const live = (items || []).filter(Boolean);
+    return el('div', { className: 'tile-grid' }, live.map((t) =>
+      el('button', {
+        className: 'tile',
+        type: 'button',
+        on: { click: t.onClick },
+      }, [
+        el('span', {
+          className: 'tile-icon',
+          // The accent is the only thing separating one tile from the next at a glance,
+          // so it is per-destination rather than a single theme colour.
+          style: t.accent ? { background: `color-mix(in srgb, ${t.accent} 18%, transparent)` } : null,
+          text: t.icon,
+        }),
+        // Wrapped so a lone final tile can lay itself out as a row without the label and
+        // its subtitle ending up side by side.
+        el('span', { className: 'tile-text' }, [
+          el('span', { className: 'tile-label', text: t.label }),
+          t.sub ? el('span', { className: 'tile-sub', text: t.sub }) : null,
+        ]),
+      ]),
+    ));
   };
 
   ui.stat = function (o) {
@@ -228,6 +351,18 @@
       }));
     }
     return wrap;
+  };
+
+  /**
+   * On/off switch. `onChange` receives the new boolean.
+   * A real checkbox underneath, so it is keyboard-reachable and reads correctly to
+   * assistive tech; the visual track and knob are drawn by CSS from :checked.
+   */
+  ui.toggle = function (checked, onChange, label) {
+    const input = el('input', { type: 'checkbox', checked: !!checked, className: 'toggle-input' });
+    if (label) input.setAttribute('aria-label', label);
+    input.addEventListener('change', () => onChange(input.checked));
+    return el('label', { className: 'toggle' }, [input, el('span', { className: 'toggle-track' })]);
   };
 
   ui.button = function (label, onClick, variant) {

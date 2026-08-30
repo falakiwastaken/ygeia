@@ -25,10 +25,27 @@
     HKQuantityTypeIdentifierBloodPressureSystolic: 'systolic',
     HKQuantityTypeIdentifierBloodPressureDiastolic: 'diastolic',
     HKQuantityTypeIdentifierVO2Max: 'vo2max',
+    HKQuantityTypeIdentifierRespiratoryRate: 'respiratory_rate',
+    HKQuantityTypeIdentifierOxygenSaturation: 'spo2',
+    HKQuantityTypeIdentifierBodyTemperature: 'body_temp',
+    HKQuantityTypeIdentifierEnvironmentalAudioExposure: 'sound_exposure',
+    HKQuantityTypeIdentifierHeadphoneAudioExposure: 'headphone_exposure',
   };
 
-  /** Metrics that accumulate across a day rather than being point readings. */
-  const SUMMED = { steps: true };
+  /**
+   * How a day's samples collapse into one value.
+   *
+   *   'sum'  accumulates across the day (steps)
+   *   'db'   energy mean — decibels are logarithmic, so an arithmetic mean of 60 and
+   *          90 dB gives 75 when the honest answer is 87. Understating noise exposure
+   *          is the one direction this must not get wrong.
+   *   'mean' everything else, and the default
+   */
+  const AGG = {
+    steps: 'sum',
+    sound_exposure: 'db',
+    headphone_exposure: 'db',
+  };
 
   /**
    * Parse Apple's timestamp format: "2024-03-01 07:14:22 +0000".
@@ -48,6 +65,12 @@
       return value * V.KG_PER_LB;
     }
     if (metric === 'weight' && u === 'st') return value * 6.35029;
+    // HealthKit writes oxygen saturation as a fraction (0.97). Some third-party apps
+    // write a percentage instead, so switch on the magnitude rather than the unit string.
+    if (metric === 'spo2' && value <= 1.5) return value * 100;
+    if (metric === 'body_temp' && (u === 'degf' || u === '°f' || u === 'f')) {
+      return (value - 32) * 5 / 9;
+    }
     return value;
   }
 
@@ -105,8 +128,12 @@
         const date = V.dateKey(when);
         const key = metric + '|' + date;
         let b = buckets.get(key);
-        if (!b) { b = { metric, date, sum: 0, count: 0, last: when.getTime() }; buckets.set(key, b); }
-        b.sum += normalise(metric, value, a.unit);
+        if (!b) { b = { metric, date, sum: 0, energySum: 0, count: 0, last: when.getTime() }; buckets.set(key, b); }
+        const v = normalise(metric, value, a.unit);
+        b.sum += v;
+        // Accumulated here rather than at the end because only the running total can be
+        // kept — the individual samples are discarded as the file streams past.
+        if (AGG[metric] === 'db') b.energySum += Math.pow(10, v / 10);
         b.count++;
         b.last = Math.max(b.last, when.getTime());
         recordCount++;
@@ -150,7 +177,10 @@
 
       const rows = [];
       for (const b of buckets.values()) {
-        const value = SUMMED[b.metric] ? b.sum : b.sum / b.count;
+        const agg = AGG[b.metric];
+        const value = agg === 'sum' ? b.sum
+          : agg === 'db' ? 10 * Math.log10(b.energySum / b.count)
+          : b.sum / b.count;
         rows.push({
           id: existing.get(b.metric + '|' + b.date) || V.uid(),
           type: b.metric,

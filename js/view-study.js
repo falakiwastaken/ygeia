@@ -108,12 +108,26 @@
       wake.addEventListener('input', renderDuration);
       renderDuration();
 
+      // Bedroom temperature. Optional — older nights simply have no tempC and nothing
+      // downstream assumes one is present.
+      const tempUnitLabel = s.tempUnit === 'f' ? '°F' : '°C';
+      const temp = V.ui.input({
+        type: 'number', step: '0.5',
+        value: existing && existing.tempC != null
+          ? String(V.round(V.cToDisplay(existing.tempC, s.tempUnit), 1))
+          : '',
+        placeholder: String(V.round(V.cToDisplay(18, s.tempUnit), 0)),
+      });
+
       body.appendChild(V.ui.sectionTitle('Log a night'));
       body.appendChild(V.el('div', { className: 'grid-2' }, [
         V.ui.field('Lights out', bed),
         V.ui.field('Woke up', wake),
       ]));
       body.appendChild(V.ui.field('How did it feel?', qualityWrap));
+      body.appendChild(V.ui.field(`Bedroom temperature (${tempUnitLabel})`, temp,
+        'Optional. Around 18 °C is the range most often cited for sleep — log it for a ' +
+        'few weeks and the app will check whether it actually matters for you.'));
       body.appendChild(durationOut);
       body.appendChild(V.el('div', { style: { height: '10px' } }));
       body.appendChild(
@@ -122,6 +136,7 @@
           const w = V.study.parseTime(wake.value);
           if (b == null || w == null) return V.toast('Enter both times');
 
+          const rawTemp = V.ui.num(temp, NaN);
           const hours = V.study.duration(b, w);
           await V.store.sleep.save({
             id: existing ? existing.id : V.uid(),
@@ -130,12 +145,29 @@
             wakeTimeMin: w,
             hours,
             quality,
+            tempC: Number.isFinite(rawTemp) ? V.displayToC(rawTemp, s.tempUnit) : null,
           });
-          // Mirror into metrics so sleep shows up in Body trends alongside everything else.
+          /*
+           * Mirror into metrics so sleep shows up in Body trends alongside everything else.
+           *
+           * The id is derived from the date, not V.uid(). With a fresh id each time, editing
+           * a night left the old row in place — and metrics.daily() averages same-day
+           * samples, so correcting 7 hours to 8 produced a stored 7.5. The value on the
+           * Study tab and the value on the Body tab disagreed, and neither was what had
+           * been typed.
+           */
           await V.store.metrics.save({
-            id: V.uid(), type: 'sleep_hours', date: V.app.state.date,
+            id: 'sleep-' + V.app.state.date, type: 'sleep_hours', date: V.app.state.date,
             recordedAt: Date.now(), value: hours, source: 'manual',
           });
+
+          // Clear any duplicates an earlier build already wrote for this date, so the
+          // average self-heals the first time a night is re-saved.
+          for (const old of await V.store.metrics.byType('sleep_hours')) {
+            if (old.date === V.app.state.date && old.id !== 'sleep-' + V.app.state.date) {
+              await V.store.metrics.remove(old.id);
+            }
+          }
 
           V.toast('Sleep logged');
           V.ui.refreshSheet();
@@ -216,6 +248,216 @@
             }),
           );
         }
+
+        // ---- Does bedroom temperature matter for you? -----------------------
+        const withTemp = logs.filter((l) => l.tempC != null);
+        if (withTemp.length >= 10) {
+          const scored = withTemp
+            .map((l) => ({ date: l.date, value: V.study.nightScore(l, target) }))
+            .filter((x) => x.value != null);
+          const corr = V.insights.correlate(
+            withTemp.map((l) => ({ date: l.date, value: l.tempC })),
+            scored,
+          );
+
+          body.appendChild(V.ui.sectionTitle('Bedroom temperature'));
+          const meanTemp = V.sum(withTemp, (l) => l.tempC) / withTemp.length;
+
+          body.appendChild(
+            V.el('div', { className: 'grid-2' }, [
+              V.ui.stat({
+                label: 'Your average',
+                value: V.fmt(V.cToDisplay(meanTemp, s.tempUnit), 1),
+                unit: ' ' + tempUnitLabel,
+              }),
+              V.ui.stat({ label: 'Nights logged', value: String(withTemp.length) }),
+            ]),
+          );
+
+          body.appendChild(
+            V.el('div', {
+              className: 'hint',
+              text: corr && corr.reportable
+                ? `Across ${corr.n} nights, ${corr.direction === 'negative' ? 'cooler' : 'warmer'} ` +
+                  `rooms went with better nights for you (${corr.strength}, r = ${V.fmt(corr.r, 2)}). ` +
+                  'That is an association in your own data, not proof one causes the other — ' +
+                  'the only way to know is to change one thing and watch.'
+                : `No clear relationship in your data yet (${withTemp.length} nights). ` +
+                  'Around 18 °C is the range usually recommended, but the evidence is ' +
+                  'thinner than it is often made to sound, and personal variation is large.',
+            }),
+          );
+        }
+      }
+    });
+  }
+
+  // ========================================================= question of the day
+
+  /**
+   * One question a day, picked deterministically from the date so it is the same every
+   * time the app is opened. Answering is recorded once — the answer cannot be changed
+   * afterwards, because a self-test you can retry until it goes green measures nothing.
+   */
+  /**
+   * Dates already offered as a popup this session.
+   *
+   * Without this the sheet would reappear every time the Study tab is rendered — and it
+   * re-renders after every save, every focus block and every tab switch. Dismissing it
+   * has to mean something, so one unprompted appearance per day is the limit; the card is
+   * still there to open it deliberately.
+   */
+  const promptedDates = new Set();
+
+  async function maybePopupDaily(state, settings) {
+    if (!V.features.enabled(settings, 'dailyQuestion')) return;
+    if (settings.dailyQuestionPopup === false) return;
+    if (promptedDates.has(state.date)) return;
+    // Only today's question ambushes anyone. Browsing back to Tuesday should not.
+    if (state.date !== V.today()) return;
+    if (V.ui.sheetOpen()) return;
+
+    const answered = await V.store.dailyAnswers.byDate(state.date);
+    if (answered) return;
+
+    promptedDates.add(state.date);
+    openDailySheet(
+      V.daily.questionFor(state.date, settings.studyLevel),
+      V.daily.factFor(state.date),
+    );
+  }
+
+  function openDailySheet(question, fact) {
+    V.ui.sheet('Question of the day', async (body) => {
+      // Re-read on every build rather than taking the answer as a parameter. The builder
+      // is re-run by refreshSheet after the user answers, and a captured argument would
+      // still say "unanswered" at exactly the moment the result should appear.
+      const existing = await V.store.dailyAnswers.byDate(V.app.state.date);
+      const answered = !!existing;
+
+      body.appendChild(
+        V.el('div', {
+          className: 'hint',
+          style: { marginTop: '0' },
+          text: `${V.daily.subjectLabel(question.subject)} · ${question.level}`,
+        }),
+      );
+      body.appendChild(V.el('div', { className: 'daily-question', text: question.question }));
+
+      const choicesWrap = V.el('div', { className: 'daily-choices' });
+      const feedback = V.el('div');
+
+      function renderChoices() {
+        choicesWrap.innerHTML = '';
+        question.choices.forEach((choice, i) => {
+          let cls = 'daily-choice';
+          if (answered) {
+            if (i === question.answer) cls += ' correct';
+            else if (i === existing.answer) cls += ' wrong';
+          }
+          choicesWrap.appendChild(
+            V.el('button', {
+              className: cls,
+              type: 'button',
+              text: String.fromCharCode(65 + i) + '.  ' + choice,
+              disabled: answered,
+              on: {
+                click: async () => {
+                  await V.store.dailyAnswers.save({
+                    date: V.app.state.date,
+                    questionId: question.id,
+                    answer: i,
+                    correct: i === question.answer,
+                  });
+                  V.haptic(i === question.answer ? 20 : 80);
+                  V.ui.refreshSheet();
+                  V.app.render();
+                },
+              },
+            }),
+          );
+        });
+      }
+      renderChoices();
+      body.appendChild(choicesWrap);
+
+      if (answered) {
+        feedback.appendChild(
+          V.el('div', {
+            className: existing.correct ? 'good-box' : 'warn-box',
+            text: existing.correct
+              ? 'Correct.'
+              : `Not this time — the answer is ${String.fromCharCode(65 + question.answer)}.`,
+          }),
+        );
+        feedback.appendChild(V.ui.sectionTitle('Why'));
+        feedback.appendChild(V.el('div', { className: 'hint', text: question.explain }));
+      } else {
+        feedback.appendChild(
+          V.el('div', { className: 'hint', text: 'Pick one. You get a single attempt, and ' +
+                                                 'the explanation either way.' }),
+        );
+      }
+      body.appendChild(feedback);
+
+      // ---- Fact of the day -------------------------------------------------
+      if (fact) {
+        body.appendChild(V.ui.sectionTitle('Fact of the day'));
+        body.appendChild(
+          V.ui.card({
+            sub: V.daily.subjectLabel(fact.subject),
+            children: [V.el('div', { className: 'daily-fact', text: fact.text })],
+          }),
+        );
+      }
+
+      // ---- Level and popup ---------------------------------------------------
+      const s = await V.store.settings.get();
+      body.appendChild(V.ui.sectionTitle('Difficulty'));
+      body.appendChild(
+        V.ui.segmented(
+          V.daily.LEVELS.map((l) => ({ value: l.value, label: l.label })),
+          s.studyLevel,
+          async (v) => {
+            await V.store.settings.set({ studyLevel: v });
+            V.toast('Level updated');
+            V.ui.refreshSheet();
+            V.app.render();
+          },
+        ),
+      );
+      body.appendChild(
+        V.el('div', {
+          className: 'hint',
+          text: 'Changing the level changes tomorrow\'s question. Today\'s stays as it is, ' +
+                'so the day\'s record is not rewritten underneath you.',
+        }),
+      );
+
+      body.appendChild(
+        V.ui.list([
+          V.ui.row({
+            title: 'Ask me automatically',
+            sub: 'Opens on its own when you go to Study, once a day',
+            accessory: V.ui.toggle(s.dailyQuestionPopup !== false, async (on) => {
+              await V.store.settings.set({ dailyQuestionPopup: on });
+              V.toast(on ? 'Will open automatically' : 'Will stay on the card');
+            }, 'Ask me automatically'),
+          }),
+        ]),
+      );
+
+      // ---- Record ------------------------------------------------------------
+      const stats = V.daily.stats(await V.store.dailyAnswers.all());
+      if (stats.answered) {
+        body.appendChild(V.ui.sectionTitle('Your record'));
+        body.appendChild(
+          V.el('div', { className: 'grid-3' }, [
+            V.ui.stat({ label: 'Answered', value: String(stats.answered) }),
+            V.ui.stat({ label: 'Correct', value: String(stats.correct) }),
+            V.ui.stat({ label: 'Streak', value: String(stats.streak) }),
+          ]),
+        );
       }
     });
   }
@@ -267,6 +509,10 @@
       if (existing) {
         body.appendChild(V.el('div', { style: { height: '8px' } }));
         body.appendChild(
+          V.ui.button('Notebooks for this subject', () => V.notebookView.openNotebooks(existing.id), 'btn-ghost'),
+        );
+        body.appendChild(V.el('div', { style: { height: '8px' } }));
+        body.appendChild(
           V.ui.button('Delete subject', async () => {
             if (!V.confirm('Delete this subject with all its sessions and review cards?')) return;
             await V.store.study.removeSubject(existing.id);
@@ -280,6 +526,15 @@
   }
 
   // =================================================================== view
+
+  /** Opened from Settings, so the question's own options are reachable without the tab. */
+  function openDailySettings() {
+    const date = V.today();
+    openDailySheet(
+      V.daily.questionFor(date, V.app.settings ? V.app.settings.studyLevel : 'standard'),
+      V.daily.factFor(date),
+    );
+  }
 
   V.views.study = {
     async render(state) {
@@ -330,33 +585,47 @@
         }),
       );
 
-      // ---- Flashcards --------------------------------------------------------
+      /*
+       * ---- The places you can go --------------------------------------------
+       *
+       * These were four separate cards, each a title, a subtitle and one full-width
+       * button. Stacked, they read as four identical grey rectangles and buried the two
+       * cards above that actually carry numbers. They are doors, not data, so they go in
+       * a grid — smaller, distinguishable by icon and colour, and out of the way of the
+       * things worth reading.
+       *
+       * No Question of the day here either: it opens by itself when this tab is opened,
+       * so a tile for it would be the same prompt twice on one screen.
+       */
       const decks = await V.store.study.decks();
+      const notebooks = V.features.enabled(s, 'notebooks')
+        ? await V.store.notebooks.all()
+        : [];
 
-      root.appendChild(
-        V.ui.card({
-          title: 'Flashcards',
+      root.appendChild(V.ui.tiles([
+        {
+          icon: '🗂', label: 'Flashcards', accent: 'var(--info)',
           sub: decks.length
-            ? `${decks.length} deck(s) · ${reviews.length} card(s)`
-            : 'Make a deck, type your cards in, study it',
-          children: [
-            V.ui.button(
-              decks.length ? 'Open decks' : 'Create your first deck',
-              () => V.flashcards.openDecks(),
-              'btn-primary',
-            ),
-          ],
-        }),
-      );
-
-      // ---- Photo problem help ------------------------------------------------
-      root.appendChild(
-        V.ui.card({
-          title: 'Stuck on a problem?',
-          sub: 'Photograph it and get it worked through step by step',
-          children: [V.ui.button('Take a photo', () => V.solveView.openSolveSheet(), 'btn-ghost')],
-        }),
-      );
+            ? `${V.pluralise(decks.length, 'deck')} · ${V.pluralise(reviews.length, 'card')}`
+            : 'Make your first deck',
+          onClick: () => V.flashcards.openDecks(),
+        },
+        V.features.enabled(s, 'notebooks') && {
+          icon: '📓', label: 'Notebooks', accent: 'var(--recovery)',
+          sub: notebooks.length ? V.pluralise(notebooks.length, 'notebook') : 'Write or draw',
+          onClick: () => V.notebookView.openNotebooks(),
+        },
+        V.features.enabled(s, 'scanDeck') && {
+          icon: '📷', label: 'Scan a page', accent: 'var(--nutrition)',
+          sub: 'Notes into flashcards',
+          onClick: () => V.scanDeckView.openScanSheet(),
+        },
+        V.features.enabled(s, 'photoHelp') && {
+          icon: '💡', label: 'Stuck?', accent: 'var(--strain)',
+          sub: 'A hint, not the answer',
+          onClick: () => V.solveView.openSolveSheet(),
+        },
+      ]));
 
       // ---- Subjects ---------------------------------------------------------
       root.appendChild(V.ui.sectionTitle('Subjects'));
@@ -415,6 +684,10 @@
       root.appendChild(V.el('div', { style: { height: '12px' } }));
       root.appendChild(V.ui.button('Add subject', () => openSubjectSheet(), 'btn-ghost'));
 
+      // Offer today's question once the tab is actually on screen. Deferred so the sheet
+      // opens over a rendered Study tab rather than an empty one.
+      setTimeout(() => maybePopupDaily(state, s), 0);
+
       return root;
     },
   };
@@ -450,4 +723,6 @@
       );
     });
   }
+
+  V.studyView = { openDailySettings };
 })(window.V);

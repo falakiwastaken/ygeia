@@ -40,6 +40,141 @@
     });
   }
 
+  // ====================================================== strain / stress / energy
+
+  /**
+   * Daily cardio and strength load for every day with any training in it.
+   *
+   * Built in one pass here rather than in domain-load, which is pure and must not touch
+   * storage. Steps come from the metrics store and are folded in by V.load.cardioLoad.
+   */
+  async function buildLoadDays() {
+    const [workouts, sets, sports, stepDays] = await Promise.all([
+      V.store.workouts.all(),
+      V.store.db.all('sets'),
+      V.store.sports.all(),
+      V.store.metrics.daily('steps'),
+    ]);
+
+    const setsByWorkout = V.groupBy(sets, 'workoutId');
+    const byDate = {};
+    const touch = (date) => (byDate[date] = byDate[date] || { date, cardio: 0, strength: 0 });
+
+    for (const w of workouts) {
+      if (!w.finishedAt) continue;
+      touch(w.date).strength += V.load.strengthLoad(setsByWorkout[w.id] || []);
+    }
+    for (const [date, list] of Object.entries(V.groupBy(sports, 'date'))) {
+      touch(date).cardio += V.load.cardioLoad(list, 0);
+    }
+    for (const d of stepDays) {
+      touch(d.date).cardio += V.load.cardioLoad([], d.value);
+    }
+
+    return Object.keys(byDate).sort().map((d) => byDate[d]);
+  }
+
+  /**
+   * "Today's load" — what training asked of you, and what your heart rate says about it.
+   *
+   * Entirely measured. An earlier version also asked for a 1–5 stress and energy rating
+   * and compared the two, but a tracker that reads a watch should not also be a
+   * questionnaire: the daily prompt was friction on every single day for a signal the
+   * heart-rate data already carries.
+   */
+  async function buildWellbeingCard(state) {
+    const date = state.date;
+    const [loadDays, rhrDaily, hrvDaily] = await Promise.all([
+      buildLoadDays(),
+      V.store.metrics.daily('resting_hr'),
+      V.store.metrics.daily('hrv'),
+    ]);
+
+    // ---- Strain ----------------------------------------------------------
+    const today = loadDays.find((d) => d.date === date) || { cardio: 0, strength: 0 };
+    // Baseline excludes today, so a huge session is not partly measured against itself.
+    const baseline = V.load.baseline(loadDays.filter((d) => d.date < date));
+    const strain = V.load.strain(today.cardio, today.strength, baseline);
+
+    // ---- Physiological stress -------------------------------------------
+    const onOrBefore = (series) => series.filter((d) => d.date <= date);
+    const latestOn = (series) => {
+      const hit = series.find((d) => d.date === date);
+      return hit ? hit.value : null;
+    };
+    const physio = V.vitals.physiologicalStress({
+      restingHr: latestOn(rhrDaily),
+      restingHrBaseline: V.vitals.baseline(onOrBefore(rhrDaily).slice(0, -1)),
+      hrv: latestOn(hrvDaily),
+      hrvBaseline: V.vitals.baseline(onOrBefore(hrvDaily).slice(0, -1)),
+    });
+
+    /*
+     * Why there is no heart-rate stress figure yet.
+     *
+     * Silence here reads as "this app cannot do that", when the real answer is "it needs
+     * a couple of weeks of readings first". The baseline is the whole point: an absolute
+     * HRV number carries almost no information without your own history to compare it
+     * against, so the app will not invent one from a population range.
+     */
+    function hrStressHint() {
+      const rhrDays = rhrDaily.filter((d) => d.date <= date).length;
+      const hrvDays = hrvDaily.filter((d) => d.date <= date).length;
+      const have = Math.max(rhrDays, hrvDays);
+      const need = V.vitals.BASELINE_MIN_SAMPLES;
+      return V.el('div', {
+        className: 'hint',
+        text: have
+          ? `Stress from your heart rate needs ${need} days of history to compare ` +
+            `against — you have ${have}. Keep logging resting heart rate and HRV, or ` +
+            'import them from Apple Health.'
+          : 'Log your resting heart rate and HRV on the Body tab — or import them from ' +
+            'Apple Health — and this will also estimate your stress from them. It is ' +
+            'measured against your own normal, so it needs a couple of weeks first.',
+      });
+    }
+
+    const tiles = [];
+    if (strain) {
+      tiles.push(V.ui.stat({ label: 'Strain', value: V.fmt(strain.value, 1), unit: ' /21' }));
+    }
+    if (physio) {
+      tiles.push(V.ui.stat({ label: 'Stress', value: String(physio.score), unit: '/100' }));
+      if (physio.recovery != null) {
+        tiles.push(V.ui.stat({ label: 'Recovery', value: String(physio.recovery), unit: '%' }));
+      }
+    }
+
+    const children = [];
+    if (tiles.length) children.push(V.el('div', { className: tiles.length >= 3 ? 'grid-3' : 'grid-2' }, tiles));
+
+    if (strain) {
+      children.push(V.el('div', { className: 'hint', style: { color: strain.color }, text: strain.label + ' day' }));
+    }
+    if (physio) {
+      children.push(V.el('div', { className: 'hint', style: { color: physio.color }, text: physio.label }));
+      children.push(V.el('div', { className: 'hint', text: physio.detail }));
+      if (physio.single) {
+        children.push(
+          V.el('div', {
+            className: 'hint',
+            text: 'Based on one signal only. Logging both resting heart rate and HRV makes ' +
+                  'this a good deal more reliable.',
+          }),
+        );
+      }
+    } else {
+      children.push(hrStressHint());
+    }
+
+    return V.ui.card({
+      title: 'Today\'s load',
+      sub: 'Measured from your training and your heart rate',
+      action: strain ? V.explain.button(async () => V.explain.strain(strain, baseline)) : null,
+      children,
+    });
+  }
+
   V.views.today = {
     async render(state) {
       const date = state.date;
@@ -60,6 +195,9 @@
       // ---- Notes and accountability ---------------------------------------
       root.appendChild(await V.calendar.buildNotesCard(state));
       root.appendChild(await V.planView.buildHabitsCard(state));
+      if (V.features.enabled(settings, 'stress')) {
+        root.appendChild(await buildWellbeingCard(state));
+      }
 
       // ---- Calorie ring + macros ------------------------------------------
       const kcal = totals.kcal || 0;

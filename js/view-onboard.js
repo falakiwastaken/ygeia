@@ -50,12 +50,15 @@
       const host = V.el('div');
       body.appendChild(host);
 
-      const steps = [renderWelcome, renderProfile, renderLock, renderDone];
+      // Feature choices, edited in place by the picker and written when that step is left.
+      const featureDraft = V.features.normalise(settings.features);
+
+      const steps = [renderWelcome, renderProfile, renderFeatures, renderLock, renderDone];
+      const titles = ['Welcome to Ygeia', 'About you', 'What do you want?', 'Keep it private?', 'All set'];
 
       function go(n) {
         step = V.clamp(n, 0, steps.length - 1);
-        V.$('#sheet-title').textContent =
-          ['Welcome to Ygeia', 'About you', 'Keep it private?', 'All set'][step];
+        V.$('#sheet-title').textContent = titles[step];
         host.innerHTML = '';
         steps[step](host);
         body.scrollTop = 0;
@@ -128,7 +131,7 @@
             weightKg: V.displayToKg(V.ui.num(weight, 75), draft.weightUnit),
             activityLevel: draft.activityLevel,
             goal: draft.goal,
-            proteinPerKg: 1.8,
+            proteinPerKg: V.domain.DEFAULT_PROTEIN_PER_KG,
           };
         }
 
@@ -242,9 +245,41 @@
           }, 'btn-primary'),
         );
         el.appendChild(V.el('div', { style: { height: '8px' } }));
-        el.appendChild(V.ui.button('Skip this', finish, 'btn-ghost'));
+        el.appendChild(V.ui.button('Skip this', () => go(2), 'btn-ghost'));
 
         redraw();
+      }
+
+      // ----------------------------------------------------------- features --
+
+      function renderFeatures(el) {
+        el.appendChild(
+          V.el('div', {
+            className: 'hint',
+            text: 'Ygeia covers a lot. Switch off whatever you will not use and it stays ' +
+                  'out of your way — you can change any of this later in Settings.',
+          }),
+        );
+
+        // hideKeyed: the AI features need a key from elsewhere and cannot work yet. They
+        // are in Settings for anyone who has one.
+        el.appendChild(V.featuresView.buildList(featureDraft, null, { hideKeyed: true }));
+
+        el.appendChild(V.el('div', { style: { height: '16px' } }));
+        el.appendChild(
+          V.ui.button('Continue', async () => {
+            await V.store.settings.set({ features: V.features.normalise(featureDraft) });
+            V.app.applyFeatures();
+            go(3);
+          }, 'btn-primary'),
+        );
+        el.appendChild(
+          V.el('div', {
+            className: 'hint',
+            text: 'Turning something off never deletes anything. Features with their own ' +
+                  'data are also skipped when caching the app for offline use.',
+          }),
+        );
       }
 
       // --------------------------------------------------------------- lock --
@@ -268,13 +303,13 @@
           el.appendChild(
             V.ui.button('Set a passcode', async () => {
               const done = await V.lockScreen.setNewPasscode();
-              if (done) { V.toast('Passcode set'); go(3); }
+              if (done) { V.toast('Passcode set'); go(4); }
             }, 'btn-primary'),
           );
         }
 
         el.appendChild(V.el('div', { style: { height: '8px' } }));
-        el.appendChild(V.ui.button('No passcode', () => go(3), 'btn-ghost'));
+        el.appendChild(V.ui.button('No passcode', () => go(4), 'btn-ghost'));
 
         el.appendChild(
           V.el('div', {

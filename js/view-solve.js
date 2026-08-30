@@ -1,7 +1,7 @@
 /*
  * Ygeia — "stuck on a problem" photo help.
  *
- * Photograph a question, get it worked through step by step, and turn it into a flashcard.
+ * Photograph a question, get a hint towards the next step, and turn it into a flashcard.
  *
  * This is the one screen in the app that sends anything to a third party, and it says so
  * on the screen rather than burying it in a privacy page. See js/ai-vision.js for the
@@ -67,7 +67,7 @@
         placeholder: 'Anything to add? e.g. "I got stuck at the second line"',
       });
       const output = V.el('div');
-      const solveBtn = V.ui.button('Explain it step by step', run, 'btn-primary');
+      const solveBtn = V.ui.button('Give me a hint', run, 'btn-primary');
 
       fileInput.addEventListener('change', async () => {
         const file = fileInput.files && fileInput.files[0];
@@ -104,11 +104,21 @@
             base64: image.base64,
             mimeType: image.mimeType,
             question: question.value,
-            model: settings.visionModel || V.aiVision.DEFAULT_MODEL,
+            // null lets ai-vision pick a sane default for whichever provider the key is for
+            model: settings.visionModel || null,
           });
 
           output.innerHTML = '';
           output.appendChild(V.el('div', { className: 'danger-box', text: VERIFY_NOTE }));
+          if (V.aiVision.looksLikeFinalAnswer(result.text)) {
+            output.appendChild(
+              V.el('div', {
+                className: 'warn-box',
+                text: 'Heads up — this reply looks like it gave away the answer rather than ' +
+                      'a hint. Try the step yourself before reading it.',
+              }),
+            );
+          }
           output.appendChild(V.el('div', { className: 'solve-answer', text: result.text }));
           output.appendChild(V.el('div', { style: { height: '12px' } }));
           output.appendChild(
@@ -211,5 +221,8 @@
   };
 
   S.VERIFY_NOTE = VERIFY_NOTE;
+  // Shared with the whiteboard, which offers the same "keep this" step on its own answers.
+  // One implementation, so the deck picker and the write-your-own-front rule stay identical.
+  S.saveAsCard = saveAsCard;
   V.solveView = S;
 })(window.V);

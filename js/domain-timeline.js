@@ -31,11 +31,16 @@
     weight: 'Weight', body_fat_pct: 'Body fat', lean_mass: 'Lean mass',
     resting_hr: 'Resting heart rate', hrv: 'HRV', systolic: 'Systolic',
     diastolic: 'Diastolic', sleep_hours: 'Sleep', steps: 'Steps', vo2max: 'VO₂ max',
+    respiratory_rate: 'Respiratory rate', spo2: 'Blood oxygen',
+    body_temp: 'Body temperature', sound_exposure: 'Environmental sound',
+    headphone_exposure: 'Headphone sound',
   };
 
   const METRIC_UNIT = {
     weight: 'kg', body_fat_pct: '%', lean_mass: 'kg', resting_hr: 'bpm', hrv: 'ms',
     systolic: 'mmHg', diastolic: 'mmHg', sleep_hours: 'h', steps: '', vo2max: '',
+    respiratory_rate: 'br/min', spo2: '%', body_temp: '°C',
+    sound_exposure: 'dBA', headphone_exposure: 'dBA',
   };
 
   /**

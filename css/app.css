@@ -28,6 +28,8 @@
   --nutrition: #C2A257;  /* wheat gold */
   --stress:    #B4737E;  /* dusty rose */
   --info:      #6F94B5;  /* distant sky */
+  --sound:     #7E8CA8;  /* slate blue — hearing and noise */
+  --energy:    #C99A4E;  /* low amber — subjective energy */
 
   --protein:   #6F94B5;
   --carbs:     #C2A257;
@@ -80,6 +82,8 @@
   --nutrition: #D8B96C;
   --stress:    #CC8B96;
   --info:      #8AAFCE;
+  --sound:     #9AA8C4;
+  --energy:    #DDB36A;
 
   --protein:   #8AAFCE;
   --carbs:     #D8B96C;
@@ -103,7 +107,7 @@
     --surface-3:#363E36; --border:#333B33;
     --text:#E9E7DC; --text-dim:#A8A798; --text-faint:#7C7C6F;
     --sleep:#A79DCB; --recovery:#97B683; --strain:#D9A06C; --nutrition:#D8B96C;
-    --stress:#CC8B96; --info:#8AAFCE;
+    --stress:#CC8B96; --info:#8AAFCE; --sound:#9AA8C4; --energy:#DDB36A;
     --protein:#8AAFCE; --carbs:#D8B96C; --fat:#D9A06C;
     --good:#97B683; --warn:#D8B96C; --bad:#CC8B96;
     --on-accent:#191D19;
@@ -193,6 +197,38 @@ h1, h2, h3, .card-title, .date-main, .stat-value, .ring-value, .timer-big {
 .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-3); margin-bottom: var(--sp-3); }
 .card-title { font-size: 16px; margin: 0; }
 .card-sub { font-size: 13px; color: var(--text-dim); }
+
+/* ---- tiles: destinations, as opposed to cards, which hold something ---- */
+.tile-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+.tile {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: var(--sp-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-sm);
+  color: var(--text);
+  font: inherit; text-align: left; cursor: pointer;
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.tile:active { transform: scale(.975); box-shadow: none; }
+.tile-icon {
+  display: flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; margin-bottom: var(--sp-2);
+  font-size: 18px; line-height: 1;
+  background: var(--surface-2);
+  border-radius: 50%;
+}
+.tile-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tile-label { font-family: var(--font-display); font-size: 15px; font-weight: 600; }
+.tile-sub { font-size: 12px; color: var(--text-faint); line-height: 1.3; }
+
+/* An odd tile out stretches rather than leaving a hole in the grid. */
+.tile-grid > .tile:last-child:nth-child(odd) { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: var(--sp-3); }
+.tile-grid > .tile:last-child:nth-child(odd) .tile-icon { margin-bottom: 0; }
 
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-2); }
@@ -383,6 +419,12 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--info); outl
 
 .hint { font-size: 12px; color: var(--text-faint); margin-top: var(--sp-2); line-height: 1.5; }
 
+/* A reading with its interpretation band. Colour comes from the band, inline. */
+.band-line {
+  font-size: 15px; font-weight: 600; line-height: 1.4;
+  margin-bottom: var(--sp-3);
+}
+
 .warn-box {
   background: color-mix(in srgb, var(--warn) 14%, var(--surface));
   border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
@@ -528,11 +570,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--info); outl
   border-radius: var(--r-md); border: 1px solid var(--border);
   background: var(--surface-2); margin-top: var(--sp-3);
 }
-.solve-answer {
-  white-space: pre-wrap; font-size: 14px; line-height: 1.65;
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--r-md); padding: var(--sp-4); margin-top: var(--sp-3);
-}
+/* (.solve-answer is defined once, further up — a second copy here differed only by
+   omitting the shadow, so the cascade silently merged the two.) */
 
 /* ================================================================== chat == */
 
@@ -737,6 +776,265 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--info); outl
 /* Study */
 .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; }
 .subject-dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 10px; }
+
+/* --- Notebooks and whiteboards ------------------------------------------- */
+
+.nb-pagenav {
+  display: flex; align-items: center; gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+.nb-pagelabel {
+  flex: 1; text-align: center;
+  font-size: 13px; color: var(--text-dim);
+}
+
+/* Lined paper, so a notebook page reads as one. */
+.nb-text {
+  width: 100%; min-height: 320px; resize: vertical;
+  line-height: 28px;
+  background:
+    repeating-linear-gradient(
+      var(--surface), var(--surface) 27px,
+      color-mix(in srgb, var(--border) 60%, transparent) 27px,
+      color-mix(in srgb, var(--border) 60%, transparent) 28px
+    );
+  /* Align the first line of text with the first rule. */
+  padding-top: 4px;
+}
+
+/* Toolbar: fixed rows, so the canvas never shifts under the user's hand when the
+   tool changes. */
+.nb-toolbar {
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+  padding: var(--sp-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.nb-row { display: flex; align-items: center; gap: var(--sp-2); }
+.nb-spacer { flex: 1 1 auto; }
+
+/* Scroll rather than wrap: a toolbar that gains a row on a narrow phone pushes the
+   drawing surface down while you are using it. */
+.nb-actions { overflow-x: auto; scrollbar-width: none; }
+.nb-actions::-webkit-scrollbar { display: none; }
+
+/* ---- asking about a boxed region ---- */
+.nb-hint { font-size: 13px; color: var(--text-faint); }
+
+/* A compact button so the toolbar keeps its fixed height with an action row in it. */
+.btn-sm {
+  padding: 6px var(--sp-3);
+  font-size: 13px;
+  width: auto;
+}
+
+/* The board is drawn on white before sending, so the preview is framed rather than
+   blended — on a dark theme an unframed white image looks like a rendering fault. */
+.nb-region-preview {
+  display: block;
+  width: 100%;
+  max-height: 240px;
+  object-fit: contain;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  margin-bottom: var(--sp-3);
+}
+
+.nb-vars { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.nb-var {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  padding: 4px var(--sp-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text);
+}
+.nb-group {
+  display: flex; gap: 2px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 2px;
+}
+
+.nb-tool {
+  min-width: 38px; height: 34px;
+  display: grid; place-items: center;
+  border: 0; border-radius: 8px;
+  background: transparent; color: var(--text);
+  font: inherit; font-size: 15px; line-height: 1;
+  cursor: pointer;
+  transition: background .14s ease;
+}
+.nb-tool:hover:not(:disabled) { background: var(--surface-2); }
+.nb-tool.on { background: var(--surface-3); }
+.nb-tool:disabled { opacity: .3; cursor: default; }
+
+.nb-sizebtn { min-width: 34px; }
+.nb-sizedot { display: block; border-radius: 50%; background: var(--text); }
+
+/* Current nib, previewed at its real size and colour. */
+.nb-nibwrap {
+  width: 30px; height: 30px;
+  display: grid; place-items: center;
+  flex: 0 0 auto;
+}
+.nb-nib { display: block; border-radius: 50%; }
+
+.nb-swatches { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.nb-swatch {
+  width: 26px; height: 26px; padding: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  box-shadow: 0 0 0 1px var(--border) inset;
+  cursor: pointer;
+}
+.nb-swatch.on { border-color: var(--text); }
+
+/* The wheel swatch wraps a native colour input, which is what opens the OS picker.
+   The input itself is invisible but still fills the swatch, so the whole circle is
+   the hit target and it stays keyboard-reachable. */
+.nb-wheel { position: relative; overflow: hidden; }
+.nb-wheel::after {
+  content: '＋'; position: absolute; inset: 0;
+  display: grid; place-items: center;
+  font-size: 13px; color: var(--on-accent);
+  text-shadow: 0 0 2px rgba(0, 0, 0, .5);
+  pointer-events: none;
+}
+.nb-colorinput {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  opacity: 0; border: 0; padding: 0;
+  cursor: pointer;
+}
+
+.nb-canvas {
+  /* Starting value only — fitCanvasHeight() replaces it with the room actually left in
+     the sheet, which depends on how many rows the toolbar is currently showing. */
+  display: block; width: 100%; height: 40vh;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  cursor: crosshair;
+  /* Without this every stroke scrolls the sheet instead of drawing. */
+  touch-action: none;
+  /* A long-press on the canvas must not raise the text selection callout. */
+  -webkit-user-select: none; user-select: none;
+}
+
+/* --- Scan to deck --------------------------------------------------------- */
+
+.scan-gallery {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: var(--sp-2);
+}
+.scan-thumb {
+  position: relative; aspect-ratio: 3 / 4;
+  border-radius: var(--r-sm); overflow: hidden;
+  border: 1px solid var(--border); background: var(--surface-2);
+}
+.scan-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.scan-remove {
+  position: absolute; top: 4px; right: 4px;
+  width: 24px; height: 24px; border-radius: 50%;
+  border: 0; cursor: pointer;
+  background: rgba(0, 0, 0, .6); color: #fff;
+  font-size: 15px; line-height: 1;
+  display: grid; place-items: center;
+}
+
+.scan-card {
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  padding: var(--sp-3); margin-bottom: var(--sp-2);
+  background: var(--surface);
+}
+/* A dropped card stays visible and editable — it is excluded, not deleted, so the
+   choice can be reversed without re-running the whole extraction. */
+.scan-card.dropped { opacity: .45; }
+.scan-card-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: var(--sp-2);
+}
+.scan-card-n { font-size: 12px; color: var(--text-faint); font-weight: 600; }
+
+/* --- Question of the day -------------------------------------------------- */
+
+.daily-question {
+  font-family: var(--font-display);
+  font-size: 19px; line-height: 1.45;
+  margin: var(--sp-3) 0 var(--sp-4);
+}
+
+.daily-choices { display: flex; flex-direction: column; gap: var(--sp-2); }
+
+.daily-choice {
+  width: 100%; text-align: left;
+  padding: var(--sp-3);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--text);
+  font: inherit; font-size: 15px; line-height: 1.4;
+  cursor: pointer;
+}
+.daily-choice:disabled { cursor: default; }
+.daily-choice.correct {
+  background: color-mix(in srgb, var(--good) 16%, var(--surface));
+  border-color: var(--good);
+}
+.daily-choice.wrong {
+  background: color-mix(in srgb, var(--bad) 14%, var(--surface));
+  border-color: var(--bad);
+}
+
+.daily-fact { font-size: 14px; line-height: 1.6; color: var(--text-dim); }
+
+/* --- On/off switch -------------------------------------------------------- */
+
+.toggle { display: inline-flex; align-items: center; cursor: pointer; flex: 0 0 auto; }
+.toggle-input {
+  /* Kept in the layout and focusable, just not painted — the track is the visual. */
+  position: absolute; opacity: 0; width: 0; height: 0; margin: 0;
+}
+.toggle-track {
+  position: relative; display: block;
+  width: 46px; height: 28px; border-radius: 999px;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  transition: background .18s ease, border-color .18s ease;
+}
+.toggle-track::after {
+  content: ''; position: absolute; top: 3px; left: 3px;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition: transform .18s ease;
+}
+.toggle-input:checked + .toggle-track {
+  background: var(--recovery);
+  border-color: var(--recovery);
+}
+.toggle-input:checked + .toggle-track::after { transform: translateX(18px); }
+.toggle-input:focus-visible + .toggle-track { outline: 2px solid var(--info); outline-offset: 2px; }
+.toggle-input:disabled + .toggle-track { opacity: .45; cursor: not-allowed; }
+
+.feature-row { align-items: flex-start; }
+.feature-blurb { font-size: 12px; color: var(--text-faint); line-height: 1.5; margin-top: 2px; }
+
+/* --- Boot failure ---------------------------------------------------------
+   Replaces the whole app when storage cannot be opened, so it has to stand on
+   its own and still look like Ygeia rather than a browser error page. */
+.boot-error {
+  max-width: 520px; margin: 0 auto;
+  padding: calc(var(--sp-6) + var(--safe-top)) var(--sp-4) var(--sp-6);
+  color: var(--text);
+}
+.boot-error h2 { font-family: var(--font-display); font-weight: 500; margin: 0 0 var(--sp-3); }
+.boot-error p { line-height: 1.6; margin: 0 0 var(--sp-4); }
+.boot-error-detail { font-size: 13px; color: var(--text-faint); }
 
 /* "How is this calculated?" affordance */
 .explain-btn {

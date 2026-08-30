@@ -51,9 +51,17 @@
       steps: [
         ['BMR', `10×${n(s.weightKg)} + 6.25×${n(s.heightCm, 0)} − 5×${s.age} + ${sexConst}`, n(bmr, 0) + ' kcal'],
         ['TDEE', `${n(bmr, 0)} × ${mult}`, n(tdee, 0) + ' kcal'],
-        ['Target', `${n(tdee, 0)} × ${goalMult}`, n(tdee * goalMult, 0) + ' kcal'],
-        ['Floored at BMR', `max(${n(tdee * goalMult, 0)}, ${n(bmr, 0)})`, n(V.domain.calorieTarget(s), 0) + ' kcal'],
-      ],
+        ['Goal', `${n(tdee, 0)} × ${goalMult}`, n(tdee * goalMult, 0) + ' kcal'],
+      ].concat(
+        s.calorieMargin
+          ? [['Safety margin', `${n(tdee * goalMult, 0)} × (1 − ${s.calorieMargin})`,
+              n(tdee * goalMult * (1 - s.calorieMargin), 0) + ' kcal']]
+          : [],
+      ).concat([
+        ['Floored at BMR',
+          `max(${n(tdee * goalMult * (1 - (s.calorieMargin || 0)), 0)}, ${n(bmr, 0)})`,
+          n(V.domain.calorieTarget(s), 0) + ' kcal'],
+      ]),
       result: n(t.kcal, 0) + ' kcal' + (s.kcalOverride != null ? ' (manually overridden)' : ''),
       source: 'Mifflin MD, St Jeor ST et al. (1990), "A new predictive equation for resting ' +
               'energy expenditure in healthy individuals", Am J Clin Nutr 51(2):241–7.',
@@ -63,13 +71,22 @@
         'Predictive equations are typically within about ±10% for any given individual. ' +
         'Log your weight for a couple of weeks and the app will correct the target against ' +
         'what the scale actually does.',
+        s.calorieMargin
+          ? `A ${Math.round(s.calorieMargin * 100)}% safety margin is applied, so the ` +
+            'target sits near the bottom of the estimated range rather than its middle. ' +
+            'Both of the big errors here — the equation and portion size — push the same ' +
+            'way, towards eating more than intended, so aiming low absorbs them. The ' +
+            'target is still never taken below your BMR.'
+          : 'No safety margin is applied, so this is the middle of the estimate. Settings ' +
+            'can shift it towards the bottom of the range if you would rather the usual ' +
+            'under-logging error left you on target than over it.',
       ],
     };
   };
 
   E.macroTargets = function (s) {
     const t = V.domain.macroTargets(s);
-    const perKg = s.proteinPerKg || 1.8;
+    const perKg = s.proteinPerKg || V.domain.DEFAULT_PROTEIN_PER_KG;
     const fatFromPct = (t.kcal * 0.25) / 9;
     const fatFloor = s.weightKg * 0.6;
 
@@ -94,10 +111,19 @@
       ],
       result: `${t.kcal} kcal · ${t.protein}g protein · ${t.carbs}g carbs · ${t.fat}g fat`,
       source: 'Protein range from Morton et al. (2018) meta-analysis, Br J Sports Med — ' +
-              'benefits plateau around 1.6 g/kg. Fat floor keeps hormone-supporting intake ' +
-              'adequate in a deficit.',
-      notes: ['Carbohydrate absorbs the remainder, so it flexes with the calorie goal ' +
-              'instead of squeezing protein.'],
+              'benefits for muscle growth plateau around 1.6 g/kg. Higher intakes preserve ' +
+              'lean mass in a deficit (Helms et al., IJSNEM 2014). Fat floor keeps ' +
+              'hormone-supporting intake adequate in a deficit.',
+      notes: [
+        `${perKg} g/kg is the top of the supported range rather than the plateau. Above ` +
+        'about 1.6 the extra is not buying more muscle — it is buying margin, because ' +
+        'protein is the macro most often under-eaten and under-logged, and it is the most ' +
+        'filling per calorie. Overshooting a target that has plateaued costs nothing.',
+        'Carbohydrate absorbs the remainder, so it flexes with the calorie goal instead of ' +
+        'squeezing protein.',
+        'To use a different number, set a protein target in grams under Targets — that ' +
+        'overrides this calculation entirely.',
+      ],
     };
   };
 
@@ -362,6 +388,125 @@
               'SLEEP 47(1), where regularity outperformed duration.',
       notes: ['Times near midnight are unwrapped before averaging, so 23:50 and 00:10 count ' +
               'as 20 minutes apart rather than 23 hours.'],
+    };
+  };
+
+  E.strain = function (strain, baseline) {
+    if (!strain || !baseline) return null;
+    const relCardio = baseline.cardio > 0 ? strain.cardio / baseline.cardio : 0;
+    const relStrength = baseline.strength > 0 ? strain.strength / baseline.strength : 0;
+
+    return {
+      key: 'strain',
+      title: 'Strain',
+      formula:
+        'relative = today_cardio ÷ usual_cardio  +  today_strength ÷ usual_strength\n' +
+        'strain   = 21 × √(relative ÷ 8), clamped to 0–21',
+      inputs: [
+        ['Cardio today', n(strain.cardio, 0) + ' MET-min'],
+        ['Usual cardio', n(baseline.cardio, 0) + ' MET-min/day'],
+        ['Strength today', n(strain.strength, 0) + ' kg lifted'],
+        ['Usual strength', n(baseline.strength, 0) + ' kg/day'],
+        ['Baseline window', baseline.n + ' days'],
+      ],
+      steps: [
+        ['Cardio ratio', `${n(strain.cardio, 0)} ÷ ${n(baseline.cardio, 0)}`, n(relCardio, 2)],
+        ['Strength ratio', `${n(strain.strength, 0)} ÷ ${n(baseline.strength, 0)}`, n(relStrength, 2)],
+        ['Relative load', `${n(relCardio, 2)} + ${n(relStrength, 2)}`, n(strain.relative, 2)],
+        ['Strain', `21 × √(${n(strain.relative, 2)} ÷ 8)`, n(strain.value, 1) + ' / 21'],
+      ],
+      result: n(strain.value, 1) + ' / 21 — ' + strain.label,
+      source: 'MET values from Ainsworth BE et al. (2011), "2011 Compendium of Physical ' +
+              'Activities", Med Sci Sports Exerc 43(8):1575–81. Tonnage is the standard ' +
+              'sets × reps × load measure of strength work.',
+      notes: [
+        'This is NOT the Whoop strain score, despite sharing the 0–21 range. Whoop derives ' +
+        'theirs from time spent in heart rate zones; this app has no continuous heart rate, ' +
+        'so this is computed from training volume instead. The two will disagree — most ' +
+        'obviously on a day that was physiologically hard but mechanically light, such as ' +
+        'training in heat or while ill.',
+        'The scale is personal, not absolute. A day at exactly your usual load scores about ' +
+        '10.5, so the number only means anything relative to your own recent training.',
+        'The square root is a presentation choice — it compresses the top of the scale so a ' +
+        'single enormous day cannot dominate. It is not fitted to any physiological model.',
+        'Steps above 3000 a day are counted as walking at 3.5 METs. The first 3000 are ' +
+        'treated as ordinary movement rather than training.',
+      ],
+    };
+  };
+
+  E.physiologicalStress = function (physio, rhrBaseline, hrvBaseline) {
+    if (!physio) return null;
+    return {
+      key: 'physiological-stress',
+      title: 'Body stress',
+      formula:
+        'z       = (today − your mean) ÷ your standard deviation\n' +
+        'combine = mean of (z of resting HR) and (−z of HRV)\n' +
+        'score   = 50 + combine × 25, clamped 0–100',
+      inputs: physio.parts.map((p) => [
+        p.key === 'rhr' ? 'Resting HR (z)' : 'HRV (z, sign flipped)',
+        n(p.z, 2),
+      ]).concat([
+        ['Resting HR baseline', rhrBaseline ? `${n(rhrBaseline.mean, 0)} ± ${n(rhrBaseline.sd, 1)} bpm over ${rhrBaseline.n} days` : 'not enough data'],
+        ['HRV baseline', hrvBaseline ? `${n(hrvBaseline.mean, 0)} ± ${n(hrvBaseline.sd, 1)} ms over ${hrvBaseline.n} days` : 'not enough data'],
+      ]),
+      steps: [
+        ['Combined z', physio.parts.map((p) => n(p.z, 2)).join(' + ') + ' ÷ ' + physio.parts.length,
+          n(V.sum(physio.parts, (p) => p.z) / physio.parts.length, 2)],
+        ['Score', `50 + ${n(V.sum(physio.parts, (p) => p.z) / physio.parts.length, 2)} × 25`, String(physio.score) + '/100'],
+      ],
+      result: physio.score + '/100 — ' + physio.label,
+      source: 'Sympathetic activation raises resting heart rate and suppresses heart rate ' +
+              'variability. Task Force of the European Society of Cardiology and NASPE ' +
+              '(1996), "Heart rate variability: standards of measurement, physiological ' +
+              'interpretation, and clinical use", Circulation 93(5):1043–65.',
+      notes: [
+        'Judged entirely against your own history, never a population range. Absolute HRV ' +
+        'varies several-fold between healthy people, so a population band would be noise.',
+        'This is not how stressed you feel, which the app asks you separately. When the two ' +
+        'disagree, that disagreement is the useful signal.',
+        physio.single
+          ? 'Only one of the two signals was available today, so this is weaker than it ' +
+            'looks. Logging both makes it considerably more reliable.'
+          : 'Both resting heart rate and HRV contributed.',
+        'Illness, alcohol, poor sleep and heat all move these markers as much as training ' +
+        'does. A high score says the load is there, not where it came from.',
+      ],
+    };
+  };
+
+  E.soundExposure = function (dba) {
+    if (dba == null) return null;
+    const allowed = V.sound.allowedMinutes(dba);
+    return {
+      key: 'sound-exposure',
+      title: 'Safe listening time',
+      formula: 'T = 480 minutes ÷ 2^((L − 85) ÷ 3)',
+      inputs: [
+        ['Measured level', n(dba, 0) + ' dBA'],
+        ['Criterion', '85 dBA for 480 minutes'],
+        ['Exchange rate', '3 dB doubles the energy, so halves the time'],
+      ],
+      steps: [
+        ['Excess over 85 dBA', `${n(dba, 0)} − 85`, n(dba - 85, 0) + ' dB'],
+        ['Halvings', `${n(dba - 85, 0)} ÷ 3`, n((dba - 85) / 3, 2)],
+        ['Allowed time', `480 ÷ 2^${n((dba - 85) / 3, 2)}`, V.sound.formatDuration(allowed)],
+      ],
+      result: V.sound.formatDuration(allowed) + ' at ' + n(dba, 0) + ' dBA',
+      source: 'NIOSH (1998), "Criteria for a Recommended Standard: Occupational Noise ' +
+              'Exposure", DHHS Publication 98-126. Headphone figures instead use the WHO / ' +
+              'ITU-T H.870 limit of 40 hours per week at 80 dBA.',
+      notes: [
+        'The 3 dB exchange rate is the physically correct one and is used by NIOSH and the ' +
+        'EU. The older OSHA regulatory limit uses 5 dB, which is more permissive and is not ' +
+        'considered protective.',
+        'Levels measured with the phone microphone are estimates. Phone mics have no ' +
+        'published sensitivity and most compress and then clip above roughly 100 dBA, so ' +
+        'very loud rooms read lower than they really are.',
+        'Hearing damage is cumulative across the day. A loud commute and a loud gym add ' +
+        'together — neither is assessed in isolation.',
+      ],
     };
   };
 

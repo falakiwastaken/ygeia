@@ -5,21 +5,31 @@
  * you to "add it first" and then sent you somewhere named after a different feature. One
  * key unlocks both, so it gets one screen, in Settings, where someone would look for it.
  *
+ * It also used to be a Google key specifically. It is now whatever key the user has: the
+ * format identifies who issued it (js/ai-providers.js) and the app adapts. Paid or free is
+ * not this screen's business — there is no signup funnel here, no recommended provider and
+ * nothing to click through. Someone who has a key pastes it; someone who does not has an
+ * app that already works.
+ *
  * Nothing here is required. The app's logs, calculations and gap analysis all work with no
- * key and no internet — this only unlocks the two features that need Google. Ygeia has no
- * built-in model and downloads nothing, so without a key there is simply no AI.
+ * key and no internet. Ygeia has no built-in model and downloads nothing, so without a key
+ * there is simply no AI.
  */
 (function (V) {
   'use strict';
 
   const K = {};
 
-  /** Free, no card. Kept as data so the steps and the link cannot drift apart. */
-  const CONSOLE_URL = 'https://aistudio.google.com/apikey';
+  /** e.g. "Google Gemini (AIza…) or Anthropic Claude (sk-ant-…)" */
+  function acceptedKeys() {
+    return V.aiProviders.PROVIDERS.map((p) => `${p.label} (${p.keyHint})`).join(' or ');
+  }
 
   K.openSheet = function () {
     V.ui.sheet('AI features', async (body) => {
-      const hasKey = await V.aiVision.hasKey();
+      const savedKey = await V.aiVision.getKey();
+      const hasKey = !!savedKey;
+      const provider = savedKey ? V.aiProviders.detect(savedKey) : null;
       const settings = await V.store.settings.get();
 
       // ---- What a key is for ------------------------------------------------
@@ -33,10 +43,12 @@
           V.el('div', {
             style: { marginTop: '6px' },
             text: hasKey
-              ? 'Remove it at any time and the rest of the app carries on unchanged.'
+              ? `Using ${provider ? provider.label : 'an unrecognised provider'}. Remove the key ` +
+                'at any time and the rest of the app carries on unchanged.'
               : 'Your logs, every calculation and the “what you’re missing” analysis need no ' +
-                'key and no internet. A key only adds the two features below, which run on ' +
-                'Google.',
+                'key and no internet. A key only adds the two features below. If you already ' +
+                'have one, paste it — Ygeia uses your key against your own account and adds ' +
+                'nothing on top.',
           }),
         ]),
       );
@@ -46,7 +58,9 @@
         V.ui.list([
           V.ui.row({
             title: 'Coach',
-            sub: 'Ask about meals, training and studying — your summary goes to Google',
+            sub: provider
+              ? `Ask about meals, training and studying — your summary goes to ${provider.label}`
+              : 'Ask about meals, training and studying — your summary is sent to your provider',
             value: hasKey ? '✓' : '—',
           }),
           V.ui.row({
@@ -56,39 +70,6 @@
           }),
         ]),
       );
-
-      // ---- Getting one -------------------------------------------------------
-      if (!hasKey) {
-        body.appendChild(V.ui.sectionTitle('Getting a free key'));
-        body.appendChild(
-          V.ui.list([
-            V.ui.row({ title: '1. Open Google AI Studio', sub: CONSOLE_URL }),
-            V.ui.row({ title: '2. Sign in with a Google account' }),
-            V.ui.row({ title: '3. Click “Create API key”' }),
-            V.ui.row({ title: '4. Copy it and paste it below' }),
-          ]),
-        );
-        body.appendChild(
-          V.el('div', {
-            className: 'hint',
-            text: 'Free, and it does not ask for a card. The free tier has generous daily ' +
-                  'limits — well beyond what this app uses. Ygeia speaks Google\'s API, so a ' +
-                  'key from another provider will not work here.',
-          }),
-        );
-        body.appendChild(V.el('div', { style: { height: '10px' } }));
-        body.appendChild(
-          V.ui.button('Copy the link', async () => {
-            try {
-              await navigator.clipboard.writeText(CONSOLE_URL);
-              V.toast('Link copied — paste it in your browser');
-            } catch (err) {
-              // Clipboard can be blocked; the address is on screen above either way.
-              V.toast(CONSOLE_URL);
-            }
-          }),
-        );
-      }
 
       // ---- The field ---------------------------------------------------------
       body.appendChild(V.ui.sectionTitle(hasKey ? 'Replace the key' : 'Your key'));
@@ -100,17 +81,46 @@
       });
       body.appendChild(V.ui.field('API key', keyInput));
 
+      if (!hasKey) {
+        body.appendChild(V.el('div', { className: 'hint', text: 'Accepts ' + acceptedKeys() + '.' }));
+      }
+
       const status = V.el('div', { className: 'hint' });
       body.appendChild(status);
+
+      /*
+       * Name the provider as soon as the key is pasted, before anything is sent.
+       * A typo, or a key from somewhere unsupported, is otherwise only discovered after a
+       * round trip, reported as a rejection, and reads as "my key is broken".
+       */
+      const detected = () => V.aiProviders.detect(keyInput.value.trim());
+      const showDetected = () => {
+        const value = keyInput.value.trim();
+        if (!value) {
+          status.className = 'hint';
+          status.textContent = '';
+          return;
+        }
+        const p = detected();
+        status.className = p ? 'hint' : 'warn-box';
+        status.textContent = p
+          ? `Recognised as a key for ${p.label}.`
+          : 'Not recognised. Ygeia accepts ' + acceptedKeys() + '.';
+      };
+      keyInput.addEventListener('input', showDetected);
+
       body.appendChild(V.el('div', { style: { height: '8px' } }));
 
       const saveBtn = V.ui.button('Save and check', async () => {
         const value = keyInput.value.trim();
         if (!value) return V.toast('Paste a key first');
 
+        const p = detected();
+        if (!p) return showDetected();
+
         saveBtn.disabled = true;
         status.className = 'hint';
-        status.textContent = 'Checking the key with Google…';
+        status.textContent = `Checking the key with ${p.label}…`;
 
         let models;
         try {
@@ -119,19 +129,17 @@
           saveBtn.disabled = false;
           status.className = 'warn-box';
           status.textContent = err.message;
-          return;   // A key Google rejects is not saved — it would only fail again later.
+          return;   // A key the provider rejects is not saved — it would only fail again later.
         }
 
         await V.aiVision.setKey(value);
 
         // Pin a model the key can actually reach, rather than a hardcoded name that may
-        // have been withdrawn from the free tier since this was written.
+        // have been withdrawn since this was written. Switching providers always re-picks,
+        // because a model id from the old one is meaningless to the new one.
         const current = settings.visionModel;
         if (!current || !models.includes(current)) {
-          const preferred = models.find((m) => /flash/i.test(m) && !/lite|preview/i.test(m))
-            || models.find((m) => /flash/i.test(m))
-            || models[0];
-          await V.store.settings.set({ visionModel: preferred });
+          await V.store.settings.set({ visionModel: p.defaultModel(models) || models[0] });
         }
 
         V.toast('Key saved — AI features unlocked');
@@ -145,30 +153,45 @@
         body.appendChild(V.ui.sectionTitle('Model'));
         const modelRow = V.el('div');
         body.appendChild(modelRow);
-        modelRow.appendChild(V.el('div', { className: 'hint', text: 'Asking Google which models your key can use…' }));
+        modelRow.appendChild(
+          V.el('div', {
+            className: 'hint',
+            text: `Asking ${provider ? provider.label : 'your provider'} which models your key can use…`,
+          }),
+        );
 
-        V.aiCloud.verifyKey(await V.aiVision.getKey()).then((models) => {
+        V.aiCloud.verifyKey(savedKey).then((models) => {
           modelRow.innerHTML = '';
+
+          /*
+           * A dropdown rather than a list of rows. Providers return dozens of model ids —
+           * the previous list was truncated to the first handful, which quietly hid the
+           * rest. A select holds all of them without taking over the sheet, and does not
+           * need the sheet rebuilt to show the new tick.
+           */
+          const current = settings.visionModel || '';
+          const shown = models.includes(current) ? current : models[0];
+
+          // The saved model can go stale — providers withdraw them. Write back what the
+          // dropdown is actually showing, or the app keeps calling a model that is gone.
+          if (shown !== current) V.store.settings.set({ visionModel: shown });
+
           modelRow.appendChild(
-            V.ui.list(
-              models.slice(0, 6).map((id) =>
-                V.ui.row({
-                  title: id,
-                  value: (settings.visionModel || '') === id ? '✓' : '',
-                  onClick: async () => {
-                    await V.store.settings.set({ visionModel: id });
-                    V.toast('Using ' + id);
-                    V.ui.refreshSheet();
-                  },
-                }),
-              ),
+            V.ui.select(
+              models.map((id) => ({ value: id, label: id })),
+              shown,
+              async (id) => {
+                await V.store.settings.set({ visionModel: id });
+                V.toast('Using ' + id);
+              },
             ),
           );
           modelRow.appendChild(
             V.el('div', {
               className: 'hint',
-              text: 'This list comes from your key, so it only offers models you can actually ' +
-                    'reach. Flash models are the fast, free-tier ones.',
+              text: `${models.length} model${models.length === 1 ? '' : 's'} available. This ` +
+                    'list comes from your key, so it only offers ones you can actually reach. ' +
+                    'Whichever you pick is the one your account is charged for.',
             }),
           );
         }).catch((err) => {
@@ -196,10 +219,11 @@
           className: 'hint',
           style: { marginTop: '14px' },
           text: 'The key is stored on this device only, in its own record, and is left out of ' +
-                'backups so it cannot leak through an export. It is sent to Google as a request ' +
-                'header — never in a web address, which would put it in server logs. Google\'s ' +
-                'free tier may use what you send to improve their models, and human reviewers ' +
-                'can see it.',
+                'backups so it cannot leak through an export. It is sent as a request header — ' +
+                'never in a web address, which would put it in server logs. It goes only to ' +
+                `${provider ? provider.label : 'the provider that issued it'} and nowhere else; ` +
+                'Ygeia has no server of its own.' +
+                (provider ? ' ' + provider.dataNote : ''),
         }),
       );
     });
@@ -207,19 +231,19 @@
 
   /** The Settings rows. Deliberately the only entry point people need to find. */
   K.buildSettingsRows = async function () {
-    const hasKey = await V.aiVision.hasKey();
+    const savedKey = await V.aiVision.getKey();
+    const provider = savedKey ? V.aiProviders.detect(savedKey) : null;
     return [
       V.ui.row({
         title: 'AI API key',
-        sub: hasKey
-          ? 'Saved — cloud coach and photo help unlocked'
-          : 'Optional. Add a free Google key to unlock the AI features.',
-        value: hasKey ? 'On' : 'Off',
+        sub: savedKey
+          ? `${provider ? provider.label : 'Unrecognised key'} — cloud coach and photo help unlocked`
+          : 'Optional. Paste an API key to unlock the AI features.',
+        value: savedKey ? 'On' : 'Off',
         onClick: () => K.openSheet(),
       }),
     ];
   };
 
-  K.CONSOLE_URL = CONSOLE_URL;
   V.aiKeyView = K;
 })(window.V);

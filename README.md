@@ -7,9 +7,11 @@ study and body composition in one app — a free alternative to closed-source tr
 tracking. Everything you log is stored in your browser's local database.
 
 Two optional features talk to the internet, both off until you turn them on and both needing
-a free Google API key you supply: **study photo help** (a photo of a homework question goes
-to Google, never your health data) and the **coach** (which does send a summary of what you
-have logged — the one feature that does). Ordinary food search queries Open Food Facts, and
+an API key you supply: **study photo help** (a photo of a homework question goes to your AI
+provider, never your health data) and the **coach** (which does send a summary of what you
+have logged — the one feature that does). A Google or Anthropic key both work — Ygeia works
+out which from the key itself. Neither feature is offered during setup, since neither can do
+anything without a key; they live in Settings. Ordinary food search queries Open Food Facts, and
 the Nearby map uses OpenStreetMap. Settings lists every one of these in full.
 
 Soft parchment-and-sage theme by default, with a forest-night dark mode.
@@ -24,6 +26,10 @@ Soft parchment-and-sage theme by default, with a forest-night dark mode.
 - Custom foods with a sanity check that catches macro/calorie typos
 - Meal logging with named portions ("1 medium egg", "1 cup") instead of guessing grams
 - Calorie and macro targets calculated from your profile (Mifflin-St Jeor BMR → TDEE)
+- **Protein at 2.2 g/kg** — the top of the supported range, not the plateau. Growth
+  benefit levels off near 1.6 g/kg, so the extra buys margin rather than more muscle:
+  protein is the macro most often under-eaten and under-logged, and overshooting a target
+  that has plateaued costs nothing. Any of the four targets can be set in grams by hand
 - **A daily food-quality score** that grades the *day*, not individual foods: protein
   adequacy, fiber, whole-food ratio, added sugar, saturated fat, sodium and meal timing
 - Late-meal detection with a calorie floor, so water and supplements don't get flagged
@@ -51,12 +57,29 @@ Soft parchment-and-sage theme by default, with a forest-night dark mode.
 - Explicitly **not** added to your calorie budget — see the note below
 
 **Sleep & study**
-- Sleep logging with duration, quality, sleep debt and a **consistency score** (regularity
-  predicts outcomes at least as strongly as total hours)
+- Sleep logging with duration, quality, bedroom temperature, sleep debt and a
+  **consistency score** (regularity predicts outcomes at least as strongly as total hours)
 - Bedtime planner built on 90-minute sleep cycles
 - Subjects with exam countdowns, focus-block timer, and study-time allocation weighted by
   urgency and how far behind each subject is
 - **Spaced repetition** on Leitner boxes (1, 3, 7, 16, 35 days)
+- **Photograph a page and get a deck** — up to five pages go to your AI provider, which
+  returns candidate cards. Every one is then shown for review: editable, individually droppable,
+  and nothing is saved until you have been through them. That step is not skippable by
+  design, because spaced repetition is very good at teaching you whatever you feed it, so
+  a wrong card is not a neutral failure. Cards are tagged with their AI origin
+- **Notebooks and whiteboards** — lined pages you type on, or an unbounded pannable,
+  zoomable canvas you draw on. Drawings are stored as vector strokes, not images, so they
+  stay crisp at any zoom, cost a few kB a page, and survive a backup export intact
+- **Ask about part of a whiteboard** — drag a box around the bit you are stuck on and get a
+  hint for it, without sending the rest of the board. It **remembers variables**: write
+  `v = 3 m/s` anywhere and it is carried into later questions on the same board, shown as
+  chips you can clear. Any answer can be kept as a flashcard. Needs an API key; off by
+  default
+- **A question a day**, SAT-shaped, across maths, reading & writing, science and history,
+  at a difficulty level you pick. One attempt, then the worked explanation either way,
+  plus a fact of the day. The question is chosen from the date, so it is the same on every
+  device and does not reshuffle when you reopen the app
 - Honest guidance on the study/sleep trade-off: cutting sleep to study costs more recall
   than the extra hour buys
 
@@ -68,13 +91,38 @@ Soft parchment-and-sage theme by default, with a forest-night dark mode.
   to move up a weight class instead
 - Rehydration plan, and a urine-colour hydration check
 
-**Body**
-- Weight, body fat, lean mass, resting HR, HRV, blood pressure, sleep, steps, VO₂ max
+**Body & vitals**
+- Weight, body fat, lean mass, resting HR, HRV, respiratory rate, blood oxygen, blood
+  pressure, body temperature, sleep, steps, VO₂ max
+- Every vital carries an **interpretation band**, because a number with no context is not
+  actionable. Where a range is personal rather than population-wide — HRV above all — it is
+  judged against your own baseline, never a published range
 - BMI — with a caveat that fires when it misclassifies a lean, muscular lifter — plus
   **FFMI**, which actually responds to training
 - Trend lines with 30-day projections — and an **r² reliability check**, so a projection
   drawn through noise is labelled untrustworthy instead of shown with false confidence
 - Self-correcting calorie targets: if the scale disagrees with the prediction, the scale wins
+
+**Hearing**
+- A **live sound level meter** that answers the only question that matters: how long is this
+  room safe for? NIOSH's 85 dBA / 8 hours with the 3 dB exchange rate, so 100 dBA reads as
+  "about 15 minutes" rather than as a bare number
+- Headphone exposure against the WHO/ITU-T limit of 40 hours a week at 80 dBA — the same
+  standard behind the headphone notifications on iPhone
+- Decibels are averaged by energy, never arithmetically: a day of 60 dB and 90 dB is 87 dB
+  of exposure, not 75. Getting this wrong understates noise, always in the unsafe direction
+- The readings are labelled as estimates, out loud. A phone microphone has no published
+  sensitivity and most compress and then clip above roughly 100 dBA, which is exactly where
+  the answer matters most. There is a calibration offset for anyone with a real meter
+
+**Strain, stress and energy**
+- A daily **strain** figure on 0–21, computed from tonnage lifted and MET-minutes worked,
+  scaled against your own trailing 28 days. It is *not* Whoop's strain — theirs comes from
+  heart-rate zones — and the explain sheet says so rather than letting the shared scale imply
+  otherwise
+- Self-rated stress and energy sit next to a **physiological stress estimate** from resting
+  HR and HRV drift. They are deliberately not merged: the day they disagree is the
+  informative one, and the app says which way
 
 **Places**
 - Nearby restaurants, cafés, libraries, gyms and supermarkets from OpenStreetMap
@@ -86,6 +134,14 @@ Soft parchment-and-sage theme by default, with a forest-night dark mode.
   trained, when you studied, when you weighed in
 - Write notes on any day — "exam tomorrow", "deload week" — and anything coming up in the
   next fortnight surfaces on Today, which is when it is still useful to know
+
+**Pick what you actually use**
+- Every non-essential area is a switch, set on first run and changeable in Settings:
+  food, training, study, body, hearing, strain/stress, notebooks, the daily question,
+  sport, weight cutting, places and the AI coach
+- Switching something off hides its tab and its cards, stops its queries running, and
+  leaves its data files out of the offline cache so they are not downloaded
+- It never deletes anything. Turn a feature back on and the whole history is still there
 
 **Accountability**
 - Daily habits tracked yes/no — deliberately binary, because partial credit turns a
@@ -123,11 +179,17 @@ Soft parchment-and-sage theme by default, with a forest-night dark mode.
   containing the full working — so bug reports arrive reproducible
 
 **Study photo help** *(optional, off by default)*
-- Photograph a problem you are stuck on and get it worked through step by step
+- Photograph a problem you are stuck on and get a hint and the next step — deliberately
+  not the answer. It names the method, gives one step, and asks you a question back. If
+  your working is shown it points at the first line that goes wrong without fixing it.
+  It will not finish the problem, and will not do so if you ask it to directly — a student
+  who photographs a question and receives a finished solution has learned nothing except
+  how to photograph a question
 - Save the result as a flashcard
-- **This is the only feature that sends anything to a third party.** It needs your own free
-  Google Gemini key and sends only the photo and your note — never health data, which is
-  enforced in code rather than promised in prose (see `js/ai-vision.js`)
+- **This is the only feature that sends anything to a third party.** It needs your own API
+  key and sends only the photo and your note — never health data, which is enforced in code
+  rather than promised in prose (see `js/ai-vision.js`). Which company receives it is
+  decided by the key you pasted (see `js/ai-providers.js`)
 
 **Coach** *(optional, off by default, needs your own key)*
 - Ask about meals, training and studying. It refuses anything medical.
@@ -188,9 +250,14 @@ What it *can* read is the export file:
 3. In Files, tap the zip once to uncompress it
 4. In Ygeia: Settings → **Import from Apple Health** → choose `apple_health_export/export.xml`
 
-Steps, weight, body fat, lean mass, resting HR, HRV, blood pressure and VO₂ max are
-imported. The file is streamed and aggregated to daily values on-device — it is never
+Steps, weight, body fat, lean mass, resting HR, HRV, blood pressure, VO₂ max, respiratory
+rate, blood oxygen, body temperature and both environmental and headphone audio exposure
+are imported. The file is streamed and aggregated to daily values on-device — it is never
 uploaded, and the whole document is never held in memory.
+
+Each metric is aggregated the way that metric actually works: steps are summed, the two
+audio-exposure types are combined by energy because decibels are logarithmic, and
+everything else is averaged.
 
 Re-importing a newer export updates existing days rather than duplicating them.
 
@@ -216,6 +283,18 @@ Worth stating plainly, because other projects tend not to:
   common way calorie tracking silently fails, and this app deliberately won't do it.
 - **The strength rank is a motivator, not a verdict.** Strength standards are population
   reference points; leverages, limb lengths and training history all move the real number.
+- **The sound meter is uncalibrated.** A phone microphone has no published sensitivity, is
+  tuned for speech, and most compress and then clip somewhere above 100 dBA — so the loudest
+  rooms, the ones that matter, read lower than they really are. Trust the band, treat the
+  exact number as approximate, and calibrate the offset against a real meter if you can. It
+  is not a hearing test.
+- **Strain is not Whoop's strain.** It shares the 0–21 range because that range is familiar,
+  but it is computed from training volume rather than heart-rate zones. The two will disagree
+  on any day that was physiologically hard but mechanically light.
+- **Blood oxygen readings from consumer sensors read high on darker skin.** Occult
+  hypoxaemia was around three times more common in Black than White patients even with
+  hospital-grade oximeters (Sjoding et al., NEJM 2020). A normal reading is therefore weaker
+  evidence than a low one.
 - **Not a medical device.** Nothing here diagnoses, treats or prevents anything. The
   biological formulas are population estimates that can be meaningfully wrong for any given
   individual. Talk to a doctor, not an app.
@@ -233,7 +312,7 @@ coach or a doctor.
 
 ```
 index.html              app shell and script order
-tests.html              144 assertions — open it in a browser, no runner needed
+tests.html              477 assertions — open it in a browser, no runner needed
 css/app.css             design system — every colour is a token
 js/util.js              DOM, date and unit helpers
 js/store.js             IndexedDB wrapper and repositories
@@ -242,8 +321,14 @@ js/domain-life.js       BMI, FFMI, sport METs
 js/domain-cut.js        weight cutting — including its safety limits
 js/domain-study.js      sleep cycles, spaced repetition, study allocation
 js/domain-rank.js       strength rating, guild ranks, training XP
+js/domain-vitals.js     vital-sign bands, personal baselines, stress from HR/HRV
+js/domain-sound.js      decibel arithmetic, NIOSH/WHO exposure limits
+js/domain-load.js       cardio load, strength load, daily strain
+js/domain-notebook.js   stroke simplification and whiteboard geometry
+js/domain-features.js   which features are on, and what that hides
 js/data-foods.js        bundled offline food library
 js/data-exercises.js    bundled exercise library
+js/data-daily.js        daily question bank and facts
 js/ui.js                reusable UI pieces (sheets, rings, rows, inputs)
 js/charts.js            hand-rolled SVG line/bar/sparkline charts
 js/map.js               minimal slippy map over OpenStreetMap tiles

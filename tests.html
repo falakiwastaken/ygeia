@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -31,23 +31,31 @@
 </div>
 <div id="out"></div>
 
-<script src="js/util.js"></script>
-<script src="js/domain.js"></script>
-<script src="js/domain-life.js"></script>
-<script src="js/domain-cut.js"></script>
-<script src="js/domain-study.js"></script>
-<script src="js/domain-rank.js"></script>
-<script src="js/domain-plan.js"></script>
-<script src="js/domain-insights.js"></script>
-<script src="js/domain-timeline.js"></script>
-<script src="js/domain-gaps.js"></script>
-<script src="js/ai-prompt.js"></script>
-<script src="js/map.js"></script>
-<script src="js/data-foods.js"></script>
-<script src="js/data-exercises.js"></script>
-<script src="js/food-parser.js"></script>
-<script src="js/data-meals.js"></script>
-<script src="js/data-programs.js"></script>
+<script src="js/util.js?v=37"></script>
+<script src="js/domain.js?v=37"></script>
+<script src="js/domain-life.js?v=37"></script>
+<script src="js/domain-cut.js?v=37"></script>
+<script src="js/domain-study.js?v=37"></script>
+<script src="js/domain-rank.js?v=37"></script>
+<script src="js/domain-plan.js?v=37"></script>
+<script src="js/domain-insights.js?v=37"></script>
+<script src="js/domain-timeline.js?v=37"></script>
+<script src="js/domain-gaps.js?v=37"></script>
+<script src="js/domain-vitals.js?v=37"></script>
+<script src="js/domain-sound.js?v=37"></script>
+<script src="js/domain-load.js?v=37"></script>
+<script src="js/domain-notebook.js?v=37"></script>
+<script src="js/domain-features.js?v=37"></script>
+<script src="js/data-daily.js?v=37"></script>
+<script src="js/ai-prompt.js?v=37"></script>
+<script src="js/ai-providers.js?v=37"></script>
+<script src="js/ai-vision.js?v=37"></script>
+<script src="js/map.js?v=37"></script>
+<script src="js/data-foods.js?v=37"></script>
+<script src="js/data-exercises.js?v=37"></script>
+<script src="js/food-parser.js?v=37"></script>
+<script src="js/data-meals.js?v=37"></script>
+<script src="js/data-programs.js?v=37"></script>
 <script>
 (function () {
   'use strict';
@@ -87,9 +95,17 @@
 
   // =====================================================================
   group('Macro targets');
-  const prof = { sex: 'male', weightKg: 80, heightCm: 180, age: 30, activityLevel: 'moderate', goal: 'maintain', proteinPerKg: 1.8 };
+  const prof = { sex: 'male', weightKg: 80, heightCm: 180, age: 30, activityLevel: 'moderate', goal: 'maintain' };
   const tg = D.macroTargets(prof);
-  t('protein = 1.8 g/kg x 80kg', tg.protein, 144);
+  // No proteinPerKg on the profile, so the 2.2 g/kg default applies: 80 x 2.2 = 176 g.
+  t('the default is 2.2 g/kg', D.DEFAULT_PROTEIN_PER_KG, 2.2);
+  t('protein = 2.2 g/kg x 80kg', tg.protein, 176);
+  t('an explicit per-kg value still wins',
+    D.macroTargets(Object.assign({}, prof, { proteinPerKg: 1.6 })).protein, 128);
+  // Grams set by hand override the calculation entirely — the only protein control left
+  // in the UI now that the g/kg field is gone.
+  t('a gram override beats the per-kg rule',
+    D.macroTargets(Object.assign({}, prof, { proteinOverride: 150 })).protein, 150);
   t('macros reconstruct calorie target', tg.protein * 4 + tg.carbs * 4 + tg.fat * 9, tg.kcal, 5);
   t('4/4/9 kcal per gram', D.kcalFromMacros({ protein: 50, carbs: 100, fat: 20 }), 50 * 4 + 100 * 4 + 20 * 9);
   t('fat floored at 0.6 g/kg',
@@ -743,11 +759,15 @@
 
   // =====================================================================
   group('Gaps — guideline targets');
-  t('cutting raises protein to 2.2 g/kg', V.gaps.proteinPerKg('cut'), 2.2);
-  t('maintaining stays at 1.8', V.gaps.proteinPerKg('maintain'), 1.8);
-  t('lean bulk stays at 1.8', V.gaps.proteinPerKg('lean_bulk'), 1.8);
-  // 76 kg cutting: 76 * 2.2 = 167.2 -> 167 g
-  t('76kg cutting asks for 167 g', Math.round(76 * V.gaps.proteinPerKg('cut')), 167);
+  // A flat 2.2 g/kg whatever the goal, so the gap card agrees with the macro target it
+  // sits next to. Two different protein numbers on one screen would just be confusing.
+  t('protein is 2.2 g/kg when cutting', V.gaps.proteinPerKg('cut'), 2.2);
+  t('and when maintaining', V.gaps.proteinPerKg('maintain'), 2.2);
+  t('and when lean bulking', V.gaps.proteinPerKg('lean_bulk'), 2.2);
+  t('the gap target matches the macro target',
+    V.gaps.proteinPerKg('maintain'), D.DEFAULT_PROTEIN_PER_KG);
+  // 76 kg: 76 * 2.2 = 167.2 -> 167 g
+  t('76kg asks for 167 g', Math.round(76 * V.gaps.proteinPerKg('cut')), 167);
   t('fibre is 14 g per 1000 kcal', V.gaps.FIBRE_PER_1000_KCAL, 14);
   t('sleep floor is 7 hours', V.gaps.SLEEP_MIN_HOURS, 7);
 
@@ -803,12 +823,25 @@
   });
   t('most severe first', mixed[0].severity === 'high' ? 1 : 0, 1);
   t('less severe after', mixed[mixed.length - 1].severity === 'medium' ? 1 : 0, 1);
+  // 76 kg at 2.2 g/kg is a 167 g target, and the gap fires below 85% of it.
   t('nothing missing -> empty list', V.gaps.find({
     settings: { weightKg: 76, goal: 'maintain' },
-    todayTotals: { kcal: 2000, protein: 140, fiber: 30 },
+    todayTotals: { kcal: 2000, protein: 167, fiber: 30 },
     recentSleep: [{ hours: 8 }, { hours: 8 }, { hours: 8 }],
     strengthSessions7: 3, metMinutes7: 900, daysLogged7: 7,
   }).length, 0);
+  t('just under the target is still not a gap', V.gaps.find({
+    settings: { weightKg: 76, goal: 'maintain' },
+    todayTotals: { kcal: 2000, protein: 145, fiber: 30 },
+    recentSleep: [{ hours: 8 }, { hours: 8 }, { hours: 8 }],
+    strengthSessions7: 3, metMinutes7: 900, daysLogged7: 7,
+  }).length, 0);
+  t('well under the target is', V.gaps.find({
+    settings: { weightKg: 76, goal: 'maintain' },
+    todayTotals: { kcal: 2000, protein: 100, fiber: 30 },
+    recentSleep: [{ hours: 8 }, { hours: 8 }, { hours: 8 }],
+    strengthSessions7: 3, metMinutes7: 900, daysLogged7: 7,
+  }).length, 1);
   t('summarise handles the empty case',
     V.gaps.summarise([]) === 'Nothing obviously missing.' ? 1 : 0, 1);
 
@@ -847,6 +880,714 @@
   t('may explain calculated gaps', /WHAT IS MISSING/.test(V.COACH_PROMPT) ? 1 : 0, 1);
   t('must not invent numbers', /Never estimate, compute or/.test(V.COACH_PROMPT) ? 1 : 0, 1);
   t('the UI states the same scope', (V.COACH_SCOPE_NOTE || '').length > 40 ? 1 : 0, 1);
+
+  // =====================================================================
+  group('Decibel arithmetic');
+  const S = V.sound;
+  // Energy mean: 10*log10((10^6 + 10^9)/2) = 10*log10(5.005e8) = 86.994
+  t('60 and 90 dB average to 87, not 75', S.meanDb([60, 90]), 86.9944, 0.001);
+  t('equal levels average to themselves', S.meanDb([80, 80]), 80);
+  t('empty input is null', S.meanDb([]) == null ? 1 : 0, 1);
+  t('non-numeric values are dropped', S.meanDb([80, null, undefined, NaN]), 80);
+  // Two equal incoherent sources double the energy, which is +3.0103 dB.
+  t('two 60 dB sources make 63 dB', S.addDb(60, 60), 63.0103, 0.001);
+  t('adding to nothing returns the other', S.addDb(null, 70), 70);
+
+  group('NIOSH exposure limits');
+  // T = 480 / 2^((L-85)/3)
+  t('85 dBA allows 8 hours', S.allowedMinutes(85), 480);
+  t('88 dBA halves it to 4 hours', S.allowedMinutes(88), 240);
+  t('91 dBA halves again to 2 hours', S.allowedMinutes(91), 120);
+  t('100 dBA leaves 15 minutes', S.allowedMinutes(100), 15);
+  t('115 dBA leaves under half a minute', S.allowedMinutes(115), 480 / Math.pow(2, 10), 0.001);
+  t('below 70 dBA there is no limit', Number.isFinite(S.allowedMinutes(60)) ? 0 : 1, 1);
+  // WHO/ITU-T: 40 hours a week at 80 dBA.
+  t('80 dBA allows 40 hours a week', S.allowedMinutesWeekly(80), 2400);
+  t('83 dBA halves the week to 20 hours', S.allowedMinutesWeekly(83), 1200);
+
+  group('Sound risk bands');
+  t('50 dBA is quiet', S.band(50).key === 'quiet' ? 1 : 0, 1);
+  t('65 dBA is safe', S.band(65).key === 'safe' ? 1 : 0, 1);
+  t('70 dBA is the elevated boundary', S.band(70).key === 'elevated' ? 1 : 0, 1);
+  t('85 dBA is where loud starts', S.band(85).key === 'loud' ? 1 : 0, 1);
+  t('84 dBA is still only elevated', S.band(84).key === 'elevated' ? 1 : 0, 1);
+  t('100 dBA is dangerous', S.band(100).key === 'dangerous' ? 1 : 0, 1);
+  t('125 dBA is painful', S.band(125).key === 'painful' ? 1 : 0, 1);
+  t('below 70 is flagged safe', S.band(60).safe ? 1 : 0, 1);
+  t('85 and above is not', S.band(85).safe ? 0 : 1, 1);
+  t('quiet rooms get no advice', S.advice(45) == null ? 1 : 0, 1);
+  t('dangerous rooms do', (S.advice(105) || '').length > 20 ? 1 : 0, 1);
+
+  group('Sound dose and microphone estimation');
+  // A full 8 hours at exactly the criterion level is 100% of the daily allowance.
+  t('8 hours at 85 dBA is a full dose', S.dailyDose([{ dba: 85, minutes: 480 }]).percent, 100);
+  t('2 hours at 88 dBA is half a dose', S.dailyDose([{ dba: 88, minutes: 120 }]).percent, 50);
+  t('a full dose is not yet over the limit', S.dailyDose([{ dba: 85, minutes: 480 }]).overLimit ? 0 : 1, 1);
+  t('doses add across the day',
+    S.dailyDose([{ dba: 88, minutes: 120 }, { dba: 91, minutes: 60 }]).percent, 100);
+  t('one steady level is its own equivalent',
+    S.dailyDose([{ dba: 85, minutes: 480 }]).equivalentDb, 85);
+  // 20*log10(rms) + offset. rms 1 is 0 dBFS, so the offset shows through unchanged.
+  t('full-scale RMS reads the offset', S.rmsToDba(1, 90), 90);
+  t('a tenth of full scale is 20 dB down', S.rmsToDba(0.1, 90), 70);
+  t('silence is null, not -Infinity', S.rmsToDba(0, 90) == null ? 1 : 0, 1);
+  t('RMS of a constant buffer is that constant', S.rms(new Float32Array([0.5, -0.5, 0.5, -0.5])), 0.5);
+
+  // =====================================================================
+  group('Vital sign baselines');
+  const VT = V.vitals;
+  const mkSeries = (vals) => vals.map((v, i) => ({ date: '2026-01-' + String(i + 1).padStart(2, '0'), value: v }));
+  // 1..7: mean 4, population variance (9+4+1+0+1+4+9)/7 = 4, so sd = 2.
+  const b7 = VT.baseline(mkSeries([1, 2, 3, 4, 5, 6, 7]));
+  t('baseline mean of 1..7 is 4', b7.mean, 4);
+  t('population sd of 1..7 is 2', b7.sd, 2);
+  t('baseline counts its samples', b7.n, 7);
+  t('six samples is too few', VT.baseline(mkSeries([1, 2, 3, 4, 5, 6])) == null ? 1 : 0, 1);
+  t('z-score of one sd above', VT.deviation(6, { mean: 4, sd: 2 }), 1);
+  t('z-score of one sd below', VT.deviation(2, { mean: 4, sd: 2 }), -1);
+  t('a flat baseline yields no z-score', VT.deviation(5, { mean: 4, sd: 0 }) == null ? 1 : 0, 1);
+
+  group('Vital sign bands');
+  t('97% SpO2 is normal', VT.spo2Band(97).label === 'Normal range' ? 1 : 0, 1);
+  t('95% is the bottom of normal', VT.spo2Band(95).label === 'Normal range' ? 1 : 0, 1);
+  t('94% is below the usual range', VT.spo2Band(94).label === 'Below the usual range' ? 1 : 0, 1);
+  t('90% is flagged for advice', VT.spo2Band(90).color === 'var(--bad)' ? 1 : 0, 1);
+  t('the skin-tone caveat is always present', /darker skin/.test(VT.spo2Caveat(98)) ? 1 : 0, 1);
+  t('16 br/min is normal', VT.respiratoryRateBand(16).label === 'Normal range' ? 1 : 0, 1);
+  t('20 br/min is the top of normal', VT.respiratoryRateBand(20).label === 'Normal range' ? 1 : 0, 1);
+  t('26 br/min is high', VT.respiratoryRateBand(26).color === 'var(--bad)' ? 1 : 0, 1);
+  t('a 45 bpm resting HR reads as athletic, not bradycardic',
+    VT.restingHrBand(45).label === 'Athletic' ? 1 : 0, 1);
+  t('65 bpm is a healthy range', VT.restingHrBand(65).label === 'Healthy range' ? 1 : 0, 1);
+  t('110 bpm at rest is flagged', VT.restingHrBand(110).color === 'var(--bad)' ? 1 : 0, 1);
+  t('36.8 C is normal', VT.bodyTempBand(36.8).label === 'Normal range' ? 1 : 0, 1);
+  t('38.5 C is a fever', VT.bodyTempBand(38.5).label === 'Fever' ? 1 : 0, 1);
+  t('37.5 C is only slightly raised', VT.bodyTempBand(37.5).label === 'Slightly raised' ? 1 : 0, 1);
+  // HRV has no population band by design — without a baseline it must say so.
+  t('HRV without a baseline refuses to judge', VT.hrvBand(45, null).needsBaseline ? 1 : 0, 1);
+  t('HRV two sd below own normal is flagged',
+    VT.hrvBand(30, { mean: 50, sd: 10 }).color === 'var(--bad)' ? 1 : 0, 1);
+  t('HRV at own normal is fine',
+    VT.hrvBand(50, { mean: 50, sd: 10 }).color === 'var(--good)' ? 1 : 0, 1);
+
+  group('Physiological stress');
+  // RHR z = (60-55)/5 = +1. HRV z = (40-50)/10 = -1, flipped to +1. Mean +1.
+  // Score = 50 + 1*25 = 75.
+  const physio = VT.physiologicalStress({
+    restingHr: 60, restingHrBaseline: { mean: 55, sd: 5 },
+    hrv: 40, hrvBaseline: { mean: 50, sd: 10 },
+  });
+  t('both markers one sd the wrong way scores 75', physio.score, 75);
+  t('and reads as elevated', physio.label === 'Elevated' ? 1 : 0, 1);
+  t('both signals were used', physio.single ? 0 : 1, 1);
+  const flat = VT.physiologicalStress({
+    restingHr: 55, restingHrBaseline: { mean: 55, sd: 5 },
+    hrv: 50, hrvBaseline: { mean: 50, sd: 10 },
+  });
+  t('sitting at your own normal is the midpoint', flat.score, 50);
+  const oneSignal = VT.physiologicalStress({
+    restingHr: 60, restingHrBaseline: { mean: 55, sd: 5 }, hrv: null, hrvBaseline: null,
+  });
+  t('one marker alone still scores', oneSignal.score, 75);
+  t('but is marked as single-signal', oneSignal.single ? 1 : 0, 1);
+  t('no baselines at all yields nothing',
+    VT.physiologicalStress({ restingHr: 60, hrv: 40 }) == null ? 1 : 0, 1);
+  // Recovery is the same reading inverted, so the two must always sum to 100.
+  t('recovery is the complement of stress', physio.score + physio.recovery, 100);
+  t('a well-recovered day reports high recovery', flat.recovery, 50);
+  // The detail line has to name the real numbers, or the score is unauditable.
+  // The first clause is sentence-cased, so match without regard to case.
+  t('the detail names the resting HR gap', /resting HR 5 bpm above/i.test(physio.detail) ? 1 : 0, 1);
+  t('and the HRV gap', /HRV 10 ms below/i.test(physio.detail) ? 1 : 0, 1);
+  t('one signal gives a one-clause detail', oneSignal.detail.split(',').length, 1);
+
+  // =====================================================================
+  group('Training load');
+  const LD = V.load;
+  t('tonnage is weight x reps',
+    LD.strengthLoad([{ completed: true, weightKg: 100, reps: 5 }]), 500);
+  t('warmups do not count toward load',
+    LD.strengthLoad([{ completed: true, type: 'warmup', weightKg: 60, reps: 5 }]), 0);
+  t('MET-minutes are MET x duration', LD.cardioLoad([{ met: 8, durationMin: 30 }], 0), 240);
+  t('sedentary steps contribute nothing', LD.cardioLoad([], 3000), 0);
+  t('fewer than sedentary steps do not go negative', LD.cardioLoad([], 500), 0);
+  // 10000 active steps / 100 per min = 100 min at 3.5 METs = 350 MET-min.
+  t('13000 steps is 350 MET-minutes', LD.cardioLoad([], 13000), 350);
+  const loadDays = [{ cardio: 100, strength: 200 }, { cardio: 200, strength: 400 }];
+  t('baseline averages cardio', LD.baseline(loadDays).cardio, 150);
+  t('baseline averages strength', LD.baseline(loadDays).strength, 300);
+  t('rest days are included in the average',
+    LD.baseline([{ cardio: 300, strength: 0 }, { cardio: 0, strength: 0 }]).cardio, 150);
+  const loadBase = { cardio: 150, strength: 300, n: 2 };
+  t('an average day of each sums to a relative load of 2', LD.combinedLoad(150, 300, loadBase), 2);
+  // 21 * sqrt(2/8) = 21 * 0.5 = 10.5 — the middle of the scale, by construction.
+  t('an ordinary day scores 10.5', LD.strain(150, 300, loadBase).value, 10.5);
+  t('and reads as moderate', LD.strain(150, 300, loadBase).label === 'Moderate' ? 1 : 0, 1);
+  // Four times an ordinary day: relative 8, 21 * sqrt(1) = 21.
+  t('four times an ordinary day tops the scale', LD.strain(600, 1200, loadBase).value, 21);
+  t('strain never exceeds 21', LD.strain(6000, 12000, loadBase).value, 21);
+  t('a rest day scores zero', LD.strain(0, 0, loadBase).value, 0);
+  t('no baseline means no strain', LD.strain(100, 100, null) == null ? 1 : 0, 1);
+  const steady = [];
+  for (let i = 0; i < 28; i++) steady.push({ cardio: 100, strength: 0 });
+  t('steady training gives an acute:chronic ratio of 1', LD.acuteChronicRatio(steady).ratio, 1);
+  t('too little history gives no ratio', LD.acuteChronicRatio(steady.slice(0, 10)) == null ? 1 : 0, 1);
+
+  // =====================================================================
+  group('Notebook geometry');
+  const NB = V.notebook;
+  // The midpoint lies exactly on the line, so it carries no information.
+  t('a straight line simplifies to its endpoints', NB.simplify([0, 0, 5, 0, 10, 0]).length, 4);
+  // The midpoint is 10 units off the chord, far beyond the tolerance.
+  t('a genuine corner is kept', NB.simplify([0, 0, 5, 10, 10, 0]).length, 6);
+  t('two points are already minimal', NB.simplify([0, 0, 1, 1]).length, 4);
+  t('a single point survives', NB.simplify([3, 4]).length, 2);
+  t('simplify does not mutate its input', (() => {
+    const pts = [0, 0, 5, 0, 10, 0];
+    NB.simplify(pts);
+    return pts.length;
+  })(), 6);
+  t('coordinates are rounded to one decimal', NB.quantise([1.234, 5.678])[0], 1.2);
+  // Perpendicular distance from (5,3) to the segment along y = 0.
+  t('distance to a segment is perpendicular',
+    NB.distanceToStroke({ pts: [0, 0, 10, 0] }, 5, 3), 3);
+  // Beyond the end the nearest point is the endpoint itself, not the infinite line.
+  t('distance past the end clamps to the endpoint',
+    NB.distanceToStroke({ pts: [0, 0, 10, 0] }, 15, 0), 5);
+  t('a dot is still measurable', NB.distanceToStroke({ pts: [0, 0] }, 3, 4), 5);
+  // Erase radius 8 plus half the stroke width 2 gives a 9-unit reach; the point is 3 away.
+  t('a stroke within reach is erased',
+    NB.eraseAt([{ pts: [0, 0, 10, 0], width: 2 }], 5, 3, 8).removed, 1);
+  t('a stroke out of reach survives',
+    NB.eraseAt([{ pts: [0, 0, 10, 0], width: 2 }], 5, 30, 8).strokes.length, 1);
+  t('erase does not mutate its input', (() => {
+    const strokes = [{ pts: [0, 0, 10, 0], width: 2 }];
+    NB.eraseAt(strokes, 5, 0, 8);
+    return strokes.length;
+  })(), 1);
+  const bounds = NB.strokeBounds({ pts: [1, 2, 5, 8] });
+  t('stroke bounds width', bounds.width, 4);
+  t('stroke bounds height', bounds.height, 6);
+  t('an empty stroke has no bounds', NB.strokeBounds({ pts: [] }) == null ? 1 : 0, 1);
+  const content = NB.contentBounds([{ pts: [0, 0, 2, 2] }, { pts: [10, 10, 12, 12] }]);
+  t('content bounds span every stroke', content.width, 12);
+  t('nothing drawn means no content bounds', NB.contentBounds([]) == null ? 1 : 0, 1);
+  const reindexed = NB.reindexPages([{ index: 5, id: 'b' }, { index: 2, id: 'a' }]);
+  t('pages renumber from zero', reindexed[0].index, 0);
+  t('and keep their order', reindexed[0].id === 'a' ? 1 : 0, 1);
+
+  // =====================================================================
+  group('Daily question');
+  const DQ = V.daily;
+  t('the same date always gives the same question',
+    DQ.questionFor('2026-03-14', 'standard').id === DQ.questionFor('2026-03-14', 'standard').id ? 1 : 0, 1);
+  t('every question at a level matches that level',
+    DQ.forLevel('standard').every((q) => q.level === 'standard') ? 1 : 0, 1);
+  t('an unknown level falls back to the whole bank',
+    DQ.forLevel('nonsense').length, DQ.QUESTIONS.length);
+  t('question ids are unique',
+    new Set(DQ.QUESTIONS.map((q) => q.id)).size, DQ.QUESTIONS.length);
+  t('every answer index is inside its choice list',
+    DQ.QUESTIONS.every((q) => q.answer >= 0 && q.answer < q.choices.length) ? 1 : 0, 1);
+  t('every question has four choices',
+    DQ.QUESTIONS.every((q) => q.choices.length === 4) ? 1 : 0, 1);
+  t('every question explains itself',
+    DQ.QUESTIONS.every((q) => (q.explain || '').length > 15) ? 1 : 0, 1);
+  t('every question has a known subject',
+    DQ.QUESTIONS.every((q) => DQ.SUBJECTS.some((s) => s.value === q.subject)) ? 1 : 0, 1);
+  t('every level has at least one question',
+    DQ.LEVELS.every((l) => DQ.QUESTIONS.some((q) => q.level === l.value)) ? 1 : 0, 1);
+  t('lookup by id round-trips', DQ.byId('m-s-1').id === 'm-s-1' ? 1 : 0, 1);
+  t('an unknown id is null', DQ.byId('nope') == null ? 1 : 0, 1);
+  t('the fact of the day is stable',
+    DQ.factFor('2026-03-14').text === DQ.factFor('2026-03-14').text ? 1 : 0, 1);
+  // A hash keyed off the day number would march through the bank in order, turning
+  // "question of the day" into a predictable cycle. Two properties rule that out: the
+  // step between consecutive days varies, and 20 days draw widely from the bank.
+  // Adjacent indices on any ONE given pair are perfectly normal — with a bank this size
+  // that happens by chance about a fifth of the time, so it is not what gets asserted.
+  const dayPool = DQ.forLevel('standard');
+  const dayIdx = [];
+  for (let d = 1; d <= 20; d++) {
+    dayIdx.push(dayPool.indexOf(DQ.questionFor('2026-03-' + String(d).padStart(2, '0'), 'standard')));
+  }
+  const daySteps = dayIdx.slice(1).map((v, i) => v - dayIdx[i]);
+  t('consecutive days do not step by a fixed amount', new Set(daySteps).size > 3 ? 1 : 0, 1);
+  t('20 days draw widely from the bank',
+    new Set(dayIdx).size >= Math.min(6, dayPool.length) ? 1 : 0, 1);
+  const stats = DQ.stats([
+    { date: '2026-01-01', correct: true },
+    { date: '2026-01-02', correct: true },
+  ]);
+  t('answered count', stats.answered, 2);
+  t('correct count', stats.correct, 2);
+  t('an unbroken run is the streak', stats.streak, 2);
+  t('a wrong answer ends the streak', DQ.stats([
+    { date: '2026-01-01', correct: true },
+    { date: '2026-01-02', correct: false },
+  ]).streak, 0);
+  t('the streak counts only the most recent run', DQ.stats([
+    { date: '2026-01-01', correct: false },
+    { date: '2026-01-02', correct: true },
+    { date: '2026-01-03', correct: true },
+  ]).streak, 2);
+  t('no answers means no streak', DQ.stats([]).streak, 0);
+
+  // =====================================================================
+  group('Scanned-page card parsing');
+  const AV = V.aiVision;
+  const pc = (s) => AV.parseCardsJson(s);
+
+  t('reads a well-formed reply',
+    pc('{"cards":[{"front":"Mitochondrion","back":"Site of ATP production"}]}').length, 1);
+  t('keeps the front text verbatim',
+    pc('{"cards":[{"front":"Mitochondrion","back":"ATP"}]}')[0].front === 'Mitochondrion' ? 1 : 0, 1);
+  // A model that ignores "JSON only" and fences its reply must still be readable.
+  t('survives a markdown fence',
+    pc('```json\n{"cards":[{"front":"A","back":"B"}]}\n```').length, 1);
+  t('survives prose around the JSON',
+    pc('Here you go:\n{"cards":[{"front":"A","back":"B"}]}\nHope that helps.').length, 1);
+  // Half a card is not a card, and a deck of blanks is worse than an error.
+  t('drops a card with no back', pc('{"cards":[{"front":"A","back":""}]}').length, 0);
+  t('drops a card with no front', pc('{"cards":[{"front":"  ","back":"B"}]}').length, 0);
+  t('drops a card missing a field entirely', pc('{"cards":[{"front":"A"}]}').length, 0);
+  t('keeps the good ones alongside the bad',
+    pc('{"cards":[{"front":"A","back":"B"},{"front":"C","back":""},{"front":"D","back":"E"}]}').length, 2);
+  // Models repeat themselves across pages covering the same ground.
+  t('de-duplicates identical fronts',
+    pc('{"cards":[{"front":"A","back":"B"},{"front":"A","back":"C"}]}').length, 1);
+  t('de-duplication ignores case and spacing',
+    pc('{"cards":[{"front":"What is ATP?","back":"x"},{"front":"what is   atp?","back":"y"}]}').length, 1);
+  t('trims whitespace',
+    pc('{"cards":[{"front":"  A  ","back":"  B  "}]}')[0].front === 'A' ? 1 : 0, 1);
+  t('an empty array is a valid answer, not an error', pc('{"cards":[]}').length, 0);
+
+  // A blurry page must not be able to produce an unbounded deck.
+  const many = { cards: [] };
+  for (let i = 0; i < 200; i++) many.cards.push({ front: 'q' + i, back: 'a' + i });
+  t('caps the number of cards from one request',
+    pc(JSON.stringify(many)).length, AV.MAX_CARDS_PER_REQUEST);
+
+  const threw = (s) => { try { pc(s); return 0; } catch (e) { return 1; } };
+  t('unparseable input throws rather than returning junk', threw('not json at all'), 1);
+  t('the wrong shape throws', threw('{"result":"ok"}'), 1);
+  t('a bare array throws', threw('[{"front":"A","back":"B"}]'), 1);
+
+  // The prompt is the main defence against invented content, so assert it says so.
+  t('the prompt forbids adding outside knowledge',
+    /never add facts from your own knowledge/i.test(AV.DECK_PROMPT) ? 1 : 0, 1);
+  t('the prompt forbids padding to a quota',
+    /never pad to reach a number/i.test(AV.DECK_PROMPT) ? 1 : 0, 1);
+  t('the prompt allows returning nothing',
+    /return an empty\s+array/i.test(AV.DECK_PROMPT) ? 1 : 0, 1);
+
+  // =====================================================================
+  group('Calorie safety margin');
+  const mProf = { sex: 'male', weightKg: 80, heightCm: 180, age: 30, activityLevel: 'moderate', goal: 'maintain' };
+  // BMR 1780, TDEE 1780*1.55 = 2759, maintain x1.0.
+  const fullTarget = D.calorieTarget(mProf);
+  t('no margin leaves the target alone', fullTarget, Math.round(1780 * 1.55));
+  t('10% aims 10% low',
+    D.calorieTarget(Object.assign({}, mProf, { calorieMargin: 0.1 })),
+    Math.round(1780 * 1.55 * 0.9));
+  t('15% aims 15% low',
+    D.calorieTarget(Object.assign({}, mProf, { calorieMargin: 0.15 })),
+    Math.round(1780 * 1.55 * 0.85));
+  t('the unadjusted target is still reportable',
+    D.calorieTargetUnadjusted(Object.assign({}, mProf, { calorieMargin: 0.1 })), fullTarget);
+  t('marginApplied reports the gap',
+    D.marginApplied(Object.assign({}, mProf, { calorieMargin: 0.1 })).difference,
+    fullTarget - Math.round(1780 * 1.55 * 0.9));
+  // The floor is what makes the margin safe to offer at all.
+  const smallCut = { sex: 'female', weightKg: 50, heightCm: 160, age: 25, activityLevel: 'sedentary', goal: 'cut', calorieMargin: 0.2 };
+  t('the margin can never push below BMR',
+    D.calorieTarget(smallCut) >= Math.round(D.bmr(smallCut)) ? 1 : 0, 1);
+  t('and says when the floor absorbed it', D.marginApplied(smallCut).floored ? 1 : 0, 1);
+  t('a margin beyond the cap is clamped',
+    D.calorieTarget(Object.assign({}, mProf, { calorieMargin: 0.9 })),
+    D.calorieTarget(Object.assign({}, mProf, { calorieMargin: D.MAX_CALORIE_MARGIN })));
+  t('a negative margin cannot raise the target',
+    D.calorieTarget(Object.assign({}, mProf, { calorieMargin: -0.5 })), fullTarget);
+  t('macros follow the adjusted target',
+    D.macroTargets(Object.assign({}, mProf, { calorieMargin: 0.1 })).kcal,
+    D.calorieTarget(Object.assign({}, mProf, { calorieMargin: 0.1 })));
+  // Protein is per-kg, so trimming calories must not quietly trim protein with them —
+  // the deficit is where the higher intake matters most.
+  t('the margin does not touch protein',
+    D.macroTargets(Object.assign({}, mProf, { calorieMargin: 0.15 })).protein,
+    D.macroTargets(mProf).protein);
+
+  // =====================================================================
+  group('Feature switches');
+  const FT = V.features;
+  const on = { features: { study: true, hearing: true, cut: true } };
+  const off = { features: { study: false, hearing: false, cut: false } };
+
+  t('an enabled feature reads as on', FT.enabled(on, 'study') ? 1 : 0, 1);
+  t('a disabled feature reads as off', FT.enabled(off, 'study') ? 0 : 1, 1);
+  // Failing open matters: a feature added after someone's settings were written must
+  // appear for them, not silently vanish because their stored flags predate it.
+  t('an unknown key falls back to its default',
+    FT.enabled({ features: {} }, 'cut'), FT.DEFAULTS.cut ? 1 : 0);
+  t('a key with no default at all still shows',
+    FT.enabled({ features: {} }, 'somethingAddedLater') ? 1 : 0, 1);
+  t('no settings at all shows defaults', FT.enabled({}, 'study') ? 1 : 0, 1);
+  // Today is essential and must survive any attempt to switch it off.
+  t('essential features cannot be disabled',
+    FT.enabled({ features: { today: false } }, 'today') ? 1 : 0, 1);
+
+  t('a disabled tab is hidden',
+    FT.visibleTabs(off, ['today', 'study', 'settings']).includes('study') ? 0 : 1, 1);
+  t('an enabled tab is shown',
+    FT.visibleTabs(on, ['today', 'study', 'settings']).includes('study') ? 1 : 0, 1);
+  // Settings owns no feature and is the only route back to the switches.
+  t('settings is never hidden',
+    FT.visibleTabs(off, ['today', 'study', 'settings']).includes('settings') ? 1 : 0, 1);
+  t('today is never hidden',
+    FT.visibleTabs(off, ['today', 'study', 'settings']).includes('today') ? 1 : 0, 1);
+
+  const allPaths = ['./js/app.js?v=1', './js/data-foods.js?v=1', './js/data-daily.js?v=1', './js/map.js?v=1'];
+  const noFood = { features: { nutrition: false, dailyQuestion: true, places: true } };
+  t('a disabled feature\'s data file is not pre-cached',
+    FT.precachePaths(noFood, allPaths).some(p => /data-foods/.test(p)) ? 0 : 1, 1);
+  t('an enabled feature\'s data file still is',
+    FT.precachePaths(noFood, allPaths).some(p => /data-daily/.test(p)) ? 1 : 0, 1);
+  t('core files are never dropped',
+    FT.precachePaths(noFood, allPaths).some(p => /app\.js/.test(p)) ? 1 : 0, 1);
+  t('the skip list names the dropped file',
+    FT.skippedPaths(noFood).includes('./js/data-foods.js') ? 1 : 0, 1);
+  t('nothing is skipped when everything is on', FT.skippedPaths({ features: FT.normalise({}) }).length,
+    FT.FEATURES.filter(f => f.heavy && !FT.DEFAULTS[f.key]).reduce((n, f) => n + f.heavy.length, 0));
+
+  t('normalise forces essentials on', FT.normalise({ today: false }).today ? 1 : 0, 1);
+  t('normalise keeps an explicit choice', FT.normalise({ cut: true }).cut ? 1 : 0, 1);
+  t('normalise ignores unknown keys', 'nonsense' in FT.normalise({ nonsense: true }) ? 0 : 1, 1);
+  t('every feature key has a default',
+    FT.FEATURES.every(f => f.key in FT.DEFAULTS) ? 1 : 0, 1);
+  t('every feature has a blurb',
+    FT.FEATURES.every(f => (f.blurb || '').length > 15) ? 1 : 0, 1);
+  t('feature keys are unique',
+    new Set(FT.FEATURES.map(f => f.key)).size, FT.FEATURES.length);
+  t('summary counts only optional features',
+    FT.summary({ features: FT.normalise({}) }).total, FT.FEATURES.filter(f => !f.essential).length);
+
+  // =====================================================================
+  group('Temperature conversion');
+  t('0 C is 32 F', V.cToDisplay(0, 'f'), 32);
+  t('100 C is 212 F', V.cToDisplay(100, 'f'), 212);
+  t('37 C is 98.6 F', V.cToDisplay(37, 'f'), 98.6);
+  t('Celsius passes through unchanged', V.cToDisplay(21.5, 'c'), 21.5);
+  t('conversion round-trips', V.displayToC(V.cToDisplay(36.6, 'f'), 'f'), 36.6, 0.0001);
+  t('-40 is the same in both', V.cToDisplay(-40, 'f'), -40);
+
+  // =====================================================================
+  group('Provider detection');
+  const AP = V.aiProviders;
+  const which = (k) => { const p = AP.detect(k); return p ? p.id : 'none'; };
+
+  t('a Google key is recognised', which('AIzaSyC1234567890abcdefghij') === 'google' ? 1 : 0, 1);
+  t('an Anthropic key is recognised',
+    which('sk-ant-api03-abcdefghijklmnop') === 'anthropic' ? 1 : 0, 1);
+  // Surrounding whitespace comes free with copy and paste and must not break detection.
+  t('padding is trimmed', which('  AIzaSyC1234567890abcdefghij  ') === 'google' ? 1 : 0, 1);
+  // Guessing here would send the key to a company the user never chose.
+  t('an unknown key is not guessed at', which('sk-proj-somethingelse') === 'none' ? 1 : 0, 1);
+  t('an empty key detects nothing', AP.detect('') === null ? 1 : 0, 1);
+  t('a truncated prefix is rejected', which('AIza') === 'none' ? 1 : 0, 1);
+  t('every provider has a fallback model',
+    AP.PROVIDERS.every((p) => typeof p.fallbackModel === 'string' && p.fallbackModel) ? 1 : 0, 1);
+  // Every provider must state what it does with submitted data — the key screen prints it
+  // verbatim, so an empty one would silently drop a privacy disclosure.
+  t('every provider declares a data note',
+    AP.PROVIDERS.every((p) => typeof p.dataNote === 'string' && p.dataNote.length > 30) ? 1 : 0, 1);
+  t('the Google note still names the training risk',
+    /train|improve their models/i.test(AP.byId('google').dataNote) ? 1 : 0, 1);
+  t('every provider has a key hint to show',
+    AP.PROVIDERS.every((p) => typeof p.keyHint === 'string' && p.keyHint) ? 1 : 0, 1);
+  t('a default model is offered per key',
+    AP.defaultModelFor('AIzaSyC1234567890abcdefghij') === 'gemini-2.5-flash' ? 1 : 0, 1);
+  t('an unknown key gets no default model',
+    AP.defaultModelFor('nonsense') === null ? 1 : 0, 1);
+
+  group('Provider request shaping');
+  const G = AP.byId('google');
+  const AN = AP.byId('anthropic');
+  const shot = { base64: 'AAA', mimeType: 'image/png' };
+
+  // Google takes the key in its own header; Anthropic needs a version and the header that
+  // permits a browser to call it at all. A missing one of these is a silent failure.
+  t('Google authenticates with x-goog-api-key',
+    G.headers('k')['x-goog-api-key'] === 'k' ? 1 : 0, 1);
+  t('Anthropic authenticates with x-api-key',
+    AN.headers('k')['x-api-key'] === 'k' ? 1 : 0, 1);
+  t('Anthropic pins an API version',
+    AN.headers('k')['anthropic-version'] === '2023-06-01' ? 1 : 0, 1);
+  t('Anthropic opts in to direct browser access',
+    AN.headers('k')['anthropic-dangerous-direct-browser-access'] === 'true' ? 1 : 0, 1);
+  // The key must never reach the URL — addresses end up in proxy and browser logs.
+  t('the Google endpoint carries no key',
+    /AIza|key=/.test(G.endpoint('gemini-2.5-flash')) ? 0 : 1, 1);
+  t('the Anthropic endpoint carries no key', /key/.test(AN.endpoint('claude-opus-5')) ? 0 : 1, 1);
+
+  const gBody = G.body({ system: 'S', text: 'Q', images: [shot], maxTokens: 100, temperature: 0.2 });
+  const aBody = AN.body({ model: 'm', system: 'S', text: 'Q', images: [shot], maxTokens: 100, temperature: 0.2, effort: 'low' });
+
+  t('Google nests the system prompt', gBody.systemInstruction.parts[0].text === 'S' ? 1 : 0, 1);
+  t('Anthropic keeps system at the top level', aBody.system === 'S' ? 1 : 0, 1);
+  t('Google sends the image first', gBody.contents[0].parts[0].inline_data.data === 'AAA' ? 1 : 0, 1);
+  t('Anthropic wraps the image in a source block',
+    aBody.messages[0].content[0].source.data === 'AAA' ? 1 : 0, 1);
+  t('Google carries the mime type', gBody.contents[0].parts[0].inline_data.mime_type === 'image/png' ? 1 : 0, 1);
+  t('Anthropic calls it media_type', aBody.messages[0].content[0].source.media_type === 'image/png' ? 1 : 0, 1);
+  t('the question follows the image on Google', gBody.contents[0].parts[1].text === 'Q' ? 1 : 0, 1);
+  t('the question follows the image on Anthropic',
+    aBody.messages[0].content[1].text === 'Q' ? 1 : 0, 1);
+  t('Google gets the token cap it understands', gBody.generationConfig.maxOutputTokens, 100);
+  t('Anthropic gets the token cap it understands', aBody.max_tokens, 100);
+  // Current Claude models reject sampling parameters with a 400, so temperature must be
+  // dropped for them even though the caller passes the same value to both.
+  t('Google accepts temperature', gBody.generationConfig.temperature, 0.2);
+  t('Anthropic is sent no temperature', aBody.temperature === undefined ? 1 : 0, 1);
+  t('Anthropic gets effort instead', aBody.output_config.effort === 'low' ? 1 : 0, 1);
+  t('Google is sent no effort', gBody.generationConfig.effort === undefined ? 1 : 0, 1);
+
+  // Multi-turn: the coach replays a conversation, and the two name their own turns
+  // differently. Getting this wrong makes the model answer as if it were the user.
+  const convo = [{ role: 'user', content: 'hi' }, { role: 'assistant', content: 'hello' }, { role: 'user', content: 'more' }];
+  const gChat = G.body({ messages: convo, maxTokens: 10 });
+  const aChat = AN.body({ model: 'm', messages: convo, maxTokens: 10 });
+  t('Google relabels assistant turns as model', gChat.contents[1].role === 'model' ? 1 : 0, 1);
+  t('Anthropic keeps them as assistant', aChat.messages[1].role === 'assistant' ? 1 : 0, 1);
+  t('every turn survives on Google', gChat.contents.length, 3);
+  t('every turn survives on Anthropic', aChat.messages.length, 3);
+  t('no empty trailing turn is appended',
+    gChat.contents[gChat.contents.length - 1].parts[0].text === 'more' ? 1 : 0, 1);
+
+  // One schema is written by the caller; each provider gets the flavour it validates.
+  const schema = { type: 'object', properties: { cards: { type: 'array', items: { type: 'object', properties: { front: { type: 'string' } }, required: ['front'] } } }, required: ['cards'] };
+  const gJson = G.body({ text: 'x', maxTokens: 10, jsonSchema: schema });
+  const aJson = AN.body({ model: 'm', text: 'x', maxTokens: 10, jsonSchema: schema });
+  t('Google is told to reply as JSON',
+    gJson.generationConfig.responseMimeType === 'application/json' ? 1 : 0, 1);
+  t('Google gets the schema verbatim',
+    gJson.generationConfig.responseSchema.additionalProperties === undefined ? 1 : 0, 1);
+  t('Anthropic gets a json_schema format',
+    aJson.output_config.format.type === 'json_schema' ? 1 : 0, 1);
+  t('Anthropic objects are closed',
+    aJson.output_config.format.schema.additionalProperties === false ? 1 : 0, 1);
+  t('nested objects are closed too',
+    aJson.output_config.format.schema.properties.cards.items.additionalProperties === false ? 1 : 0, 1);
+  t('tightening does not mutate the original',
+    schema.additionalProperties === undefined ? 1 : 0, 1);
+  t('required lists survive tightening',
+    aJson.output_config.format.schema.required[0] === 'cards' ? 1 : 0, 1);
+
+  group('Provider response reading');
+  t('Google text is joined from parts',
+    G.parse({ candidates: [{ content: { parts: [{ text: 'a' }, { text: 'b' }] } }] }).text === 'ab' ? 1 : 0, 1);
+  t('Anthropic text is joined from blocks',
+    AN.parse({ content: [{ type: 'text', text: 'a' }, { type: 'text', text: 'b' }] }).text === 'ab' ? 1 : 0, 1);
+  // Thinking blocks are not the answer and must not be concatenated into it.
+  t('non-text blocks are ignored',
+    AN.parse({ content: [{ type: 'thinking', thinking: 'hmm' }, { type: 'text', text: 'a' }] }).text === 'a' ? 1 : 0, 1);
+  t('a safety stop is reported as blocked',
+    G.parse({ candidates: [{ finishReason: 'SAFETY' }] }).stop === 'blocked' ? 1 : 0, 1);
+  // A refusal is an HTTP 200 with empty or partial content — checked before reading it,
+  // or it surfaces as the meaningless "reply came back empty".
+  t('an Anthropic refusal is reported as blocked',
+    AN.parse({ stop_reason: 'refusal', content: [] }).stop === 'blocked' ? 1 : 0, 1);
+  t('truncation is reported as truncated',
+    G.parse({ candidates: [{ finishReason: 'MAX_TOKENS' }] }).stop === 'truncated' ? 1 : 0, 1);
+  t('Anthropic truncation too',
+    AN.parse({ stop_reason: 'max_tokens', content: [{ type: 'text', text: 'half' }] }).stop === 'truncated' ? 1 : 0, 1);
+  t('an empty reply is reported as empty',
+    G.parse({ candidates: [{ content: { parts: [] } }] }).stop === 'empty' ? 1 : 0, 1);
+  t('a missing candidate does not throw', G.parse({}).stop === 'empty' ? 1 : 0, 1);
+  t('a null response does not throw', AN.parse(null).stop === 'empty' ? 1 : 0, 1);
+
+  group('Provider error messages');
+  const kind = (status, msg) => AP.normaliseError(status, { error: { message: msg } }, G).kind;
+  const says = (status, msg) => AP.normaliseError(status, { error: { message: msg } }, G).message;
+
+  t('401 is an auth problem', kind(401, 'nope') === 'auth' ? 1 : 0, 1);
+  t('403 is an auth problem', kind(403, 'nope') === 'auth' ? 1 : 0, 1);
+  t('a 400 about the key is an auth problem',
+    kind(400, 'API key not valid. Please pass a valid API key.') === 'auth' ? 1 : 0, 1);
+  t('a 400 about anything else is not', kind(400, 'bad image') === 'unknown' ? 1 : 0, 1);
+  t('404 points at the model picker', kind(404, 'not found') === 'model' ? 1 : 0, 1);
+  t('500 is the provider\'s problem', kind(503, 'overloaded') === 'server' ? 1 : 0, 1);
+  // The 429 split: same status, opposite advice. Telling someone whose daily quota is gone
+  // to "try again shortly" sends them into a retry loop for hours.
+  t('a per-minute 429 is a rate limit',
+    kind(429, 'Too many requests per minute') === 'rate' ? 1 : 0, 1);
+  t('a per-day 429 is a spent quota',
+    kind(429, 'Quota exceeded for quota metric requests per day') === 'quota' ? 1 : 0, 1);
+  t('a rate limit says to wait', /wait a moment/i.test(says(429, 'per minute')) ? 1 : 0, 1);
+  t('a spent quota says tomorrow',
+    /tomorrow/i.test(says(429, 'requests per day exceeded')) ? 1 : 0, 1);
+  t('a spent quota does not tell you to retry now',
+    /try again/i.test(says(429, 'requests per day exceeded')) ? 0 : 1, 1);
+  t('the offending provider is named',
+    /Google/.test(says(500, '')) ? 1 : 0, 1);
+  t('errors carry a machine-readable kind',
+    typeof AP.normaliseError(429, null, G).kind === 'string' ? 1 : 0, 1);
+  t('a missing body does not throw', AP.normaliseError(500, null, null).kind === 'server' ? 1 : 0, 1);
+
+  group('Features needing a key');
+  const FF = V.features.FEATURES;
+  const keyed = FF.filter((f) => f.needsKey).map((f) => f.key);
+  // These two do nothing until the user brings a key, so the first-run chooser leaves them
+  // out. Everything else must stay in it.
+  t('the coach is flagged as needing a key', keyed.includes('coach') ? 1 : 0, 1);
+  t('photo-to-flashcards is too', keyed.includes('scanDeck') ? 1 : 0, 1);
+  t('photo problem help is too', keyed.includes('photoHelp') ? 1 : 0, 1);
+  t('nothing else is', keyed.length, 3);
+  t('all of them are off by default',
+    keyed.every((k) => V.features.DEFAULTS[k] === false) ? 1 : 0, 1);
+  // Every AI feature must have a switch. One used to render on the Study tab with no
+  // feature key at all, so switching the AI off did not remove it.
+  t('every keyed feature has a default entry',
+    keyed.every((k) => k in V.features.DEFAULTS) ? 1 : 0, 1);
+  // enabled() falls back to DEFAULTS for keys absent from stored settings, so a feature
+  // added in a later version stays off for people upgrading rather than appearing.
+  t('a new keyed feature is off for existing users',
+    V.features.enabled({ features: { study: true } }, 'photoHelp') ? 0 : 1, 1);
+  // The chooser filters on this flag; a keyed feature that is also essential could never
+  // be hidden, and would put an unusable switch on the first screen.
+  t('no keyed feature is essential', FF.some((f) => f.needsKey && f.essential) ? 0 : 1, 1);
+  t('hiding them still leaves a real list',
+    FF.filter((f) => !f.essential && !f.needsKey).length > 5 ? 1 : 0, 1);
+  // Settings shows every switch, so the unfiltered list must still contain them.
+  t('they remain in the full list', FF.length - keyed.length < FF.length ? 1 : 0, 1);
+
+  // =====================================================================
+  group('Boxing off a region');
+  const NBR = V.notebook;
+  const rect = (a,b,c,d) => NBR.normaliseRect(a,b,c,d);
+
+  // Dragging up-and-left is as natural as down-and-right and yields negative extents.
+  t('a down-right drag keeps its corner', rect(10,10,50,40).x, 10);
+  t('an up-left drag is flipped', rect(50,40,10,10).x, 10);
+  t('width is always positive', rect(50,40,10,10).w, 40);
+  t('height is always positive', rect(50,40,10,10).h, 30);
+  t('both drags describe the same box',
+    JSON.stringify(rect(10,10,50,40)) === JSON.stringify(rect(50,40,10,10)) ? 1 : 0, 1);
+  // A click that moved three pixels is not a selection.
+  t('a tiny box is unusable', NBR.isUsableRect(rect(0,0,5,5)) ? 0 : 1, 1);
+  t('a real box is usable', NBR.isUsableRect(rect(0,0,200,120)) ? 1 : 0, 1);
+  t('a thin sliver is unusable', NBR.isUsableRect(rect(0,0,300,4)) ? 0 : 1, 1);
+  t('null is unusable', NBR.isUsableRect(null) ? 0 : 1, 1);
+  t('padding grows every side', NBR.padRect({x:100,y:100,w:50,h:50}, 10).x, 90);
+  t('padding adds twice to the size', NBR.padRect({x:100,y:100,w:50,h:50}, 10).w, 70);
+
+  const inside  = { pts: [20,20, 30,30], color:'#000', width:2 };
+  const outside = { pts: [500,500, 520,520], color:'#000', width:2 };
+  // Overlapping, not contained: the tail of an equals sign poking out of the box must not
+  // cause the whole stroke to be dropped from the image.
+  const straddling = { pts: [40,40, 200,40], color:'#000', width:2 };
+  const box = { x:0, y:0, w:100, h:100 };
+
+  t('a stroke inside is included', NBR.strokesInRect([inside], box).length, 1);
+  t('a stroke outside is not', NBR.strokesInRect([outside], box).length, 0);
+  t('a stroke crossing the edge is included', NBR.strokesInRect([straddling], box).length, 1);
+  t('only the relevant strokes come back',
+    NBR.strokesInRect([inside, outside, straddling], box).length, 2);
+  t('no box means no strokes', NBR.strokesInRect([inside], null).length, 0);
+  t('an empty board is handled', NBR.strokesInRect([], box).length, 0);
+
+  group('Remembered variables');
+  const mv = NBR.mergeVariables;
+  t('a new variable is kept', mv([], [{name:'x',value:'5'}]).length, 1);
+  t('existing ones survive',
+    mv([{name:'x',value:'5'}], [{name:'y',value:'2'}]).length, 2);
+  // Redefining further down the board is the student changing their mind, not a conflict.
+  t('a redefinition wins',
+    mv([{name:'x',value:'5'}], [{name:'x',value:'9'}])[0].value === '9' ? 1 : 0, 1);
+  t('a redefinition does not duplicate',
+    mv([{name:'x',value:'5'}], [{name:'x',value:'9'}]).length, 1);
+  t('first-seen order is stable',
+    mv([{name:'a',value:'1'},{name:'b',value:'2'}], [{name:'a',value:'3'}])[0].name === 'a' ? 1 : 0, 1);
+  t('a nameless entry is dropped', mv([], [{name:'',value:'5'}]).length, 0);
+  t('a valueless entry is dropped', mv([], [{name:'x',value:''}]).length, 0);
+  t('whitespace is trimmed', mv([], [{name:' x ',value:' 5 '}])[0].name === 'x' ? 1 : 0, 1);
+  t('null inputs are survivable', mv(null, null).length, 0);
+  // Over the cap the working end of the board is the relevant end.
+  const manyVars = Array.from({length: 60}, (_, i) => ({name:'v'+i, value:String(i)}));
+  t('the list is capped', mv([], manyVars).length, NBR.MAX_VARIABLES);
+  t('the newest survive the cap',
+    mv([], manyVars)[NBR.MAX_VARIABLES-1].name === 'v59' ? 1 : 0, 1);
+  t('forgetting removes one',
+    NBR.forgetVariable([{name:'x',value:'1'},{name:'y',value:'2'}], 'x').length, 1);
+  t('forgetting keeps the others',
+    NBR.forgetVariable([{name:'x',value:'1'},{name:'y',value:'2'}], 'x')[0].name === 'y' ? 1 : 0, 1);
+
+  group('Whiteboard help replies');
+  const ph = AV.parseBoardHelp;
+  const pv = AV.parseBoardVariables;
+  const reply = '{"help":"Try isolating x first.","variables":[{"name":"x","value":"5"}]}';
+
+  t('the help text is read', ph(reply) === 'Try isolating x first.' ? 1 : 0, 1);
+  t('variables are read', pv(reply).length, 1);
+  t('the value comes through', pv(reply)[0].value === '5' ? 1 : 0, 1);
+  t('a markdown fence survives', ph('```json\n' + reply + '\n```') === 'Try isolating x first.' ? 1 : 0, 1);
+  // A schema is a strong constraint, not a guarantee — a prose reply must still show.
+  t('plain prose falls back to itself',
+    ph('Just try isolating x.') === 'Just try isolating x.' ? 1 : 0, 1);
+  t('prose yields no variables', pv('Just try isolating x.').length, 0);
+  t('an empty variable list is fine', pv('{"help":"hi","variables":[]}').length, 0);
+  t('a half variable is dropped', pv('{"help":"h","variables":[{"name":"x"}]}').length, 0);
+  t('a nameless variable is dropped', pv('{"help":"h","variables":[{"name":"","value":"5"}]}').length, 0);
+  t('duplicates are collapsed',
+    pv('{"help":"h","variables":[{"name":"x","value":"1"},{"name":"x","value":"2"}]}').length, 1);
+  t('an absurdly long name is dropped',
+    pv('{"help":"h","variables":[{"name":"' + 'z'.repeat(40) + '","value":"5"}]}').length, 0);
+  t('units are preserved',
+    pv('{"help":"h","variables":[{"name":"v","value":"3 m/s"}]}')[0].value === '3 m/s' ? 1 : 0, 1);
+
+  group('Tutoring prompt');
+  const rules = AV.TUTOR_RULES;
+  // The prompt used to say "work through it step by step" and "state the final answer
+  // clearly at the end" — a homework machine. These assertions pin the reversal.
+  t('it forbids stating the answer', /NEVER state the final answer/.test(rules) ? 1 : 0, 1);
+  t('it forbids working to completion', /NEVER work the problem to completion/.test(rules) ? 1 : 0, 1);
+  t('it gives one step, not the chain', /ONE next step/.test(rules) ? 1 : 0, 1);
+  t('it holds when asked directly', /ask you to just give the answer/.test(rules) ? 1 : 0, 1);
+  t('it no longer promises a final answer',
+    /State the final answer clearly/.test(rules) ? 0 : 1, 1);
+  t('the photo helper uses these rules', AV.SYSTEM_PROMPT.indexOf(rules) > -1 ? 1 : 0, 1);
+  t('the whiteboard helper uses them too', AV.BOARD_PROMPT.indexOf(rules) > -1 ? 1 : 0, 1);
+  t('only the whiteboard one reads variables',
+    /variable definitions/.test(AV.BOARD_PROMPT) && !/variable definitions/.test(AV.SYSTEM_PROMPT) ? 1 : 0, 1);
+
+  group('Answer-leak detector');
+  const leak = AV.looksLikeFinalAnswer;
+  // Explicit declarations — the phrasings a model reaches for once it has decided to hand
+  // the result over.
+  t('"the answer is" is caught', leak('So the answer is 42.') ? 1 : 0, 1);
+  t('"the final answer is" is caught', leak('The final answer is x = 3.') ? 1 : 0, 1);
+  t('"therefore the solution" is caught', leak('Therefore the solution is 7.') ? 1 : 0, 1);
+  t('"in conclusion" is caught', leak('In conclusion, the value is 9.') ? 1 : 0, 1);
+  t('case does not matter', leak('THE ANSWER IS 5') ? 1 : 0, 1);
+
+  /*
+   * False positives matter more than misses. The warning sits above a reply the student
+   * asked for, so crying wolf on correct tutoring trains them to ignore it — and the lines
+   * below are exactly what correct tutoring output looks like. A detector that fires on
+   * these is worse than no detector.
+   */
+  t('a bare equation is not a leak', leak('Start by writing 2x + 3 = 11.') ? 0 : 1, 1);
+  t('an intermediate step is not a leak',
+    leak('Subtract 3 from both sides to get 2x = 8.') ? 0 : 1, 1);
+  t('naming a method is not a leak',
+    leak('This one calls for the quadratic formula.') ? 0 : 1, 1);
+  t('a question back is not a leak',
+    leak('What do you get if you divide both sides by 2?') ? 0 : 1, 1);
+  t('mentioning the word answer is not a leak',
+    leak('Once you have an answer, check it by substituting back.') ? 0 : 1, 1);
+  t('"answer that yourself" is not a leak',
+    leak('Try to answer that step yourself first.') ? 0 : 1, 1);
+  t('empty text is not a leak', leak('') ? 0 : 1, 1);
+  t('null is survivable', leak(null) ? 0 : 1, 1);
 
   // =====================================================================
   const summary = document.createElement('div');

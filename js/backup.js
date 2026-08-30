@@ -50,7 +50,7 @@
     'foods', 'foodLogs', 'recipes', 'exercises', 'templates', 'workouts', 'sets',
     'metrics', 'sportSessions', 'sleepLogs', 'subjects', 'studySessions', 'reviewItems',
     'cutPlans', 'places', 'checkIns', 'habits', 'habitLogs', 'mealPlans', 'programRun',
-    'decks', 'notes', 'kv',
+    'decks', 'notes', 'notebooks', 'notebookPages', 'dailyAnswers', 'kv',
   ];
 
   const enc = new TextEncoder();

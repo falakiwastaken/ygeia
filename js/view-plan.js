@@ -637,12 +637,19 @@
       }));
     };
 
+    const sortedSleep = sleepLogs.slice().sort((a, b) => (a.date < b.date ? -1 : 1));
+
     return {
-      sleepHours: sleepLogs.sort((a, b) => (a.date < b.date ? -1 : 1)).map((l) => ({ date: l.date, value: l.hours })),
+      sleepHours: sortedSleep.map((l) => ({ date: l.date, value: l.hours })),
+      bedroomTemp: sortedSleep.filter((l) => l.tempC != null).map((l) => ({ date: l.date, value: l.tempC })),
       calories, protein, nutritionScore, lateKcal,
       trainingVolume, studyMinutes,
       steps: metricSeries('steps'),
       weight: metricSeries('weight'),
+      restingHr: metricSeries('resting_hr'),
+      hrv: metricSeries('hrv'),
+      spo2: metricSeries('spo2'),
+      respiratoryRate: metricSeries('respiratory_rate'),
     };
   }
 

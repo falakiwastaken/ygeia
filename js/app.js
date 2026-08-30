@@ -42,6 +42,38 @@
     updateHeader();
   };
 
+  /** Tabs currently switched on. Settings and Today are always present. */
+  app.visibleTabs = function () {
+    return V.features.visibleTabs(app.settings || {}, VIEW_IDS);
+  };
+
+  /**
+   * Show or hide tabs to match the feature switches.
+   *
+   * Called after any change to them. If the tab the user is standing on has just been
+   * switched off, they are moved to Today rather than left looking at a view that is no
+   * longer reachable.
+   */
+  app.applyFeatures = async function () {
+    app.settings = await V.store.settings.get();
+    const visible = app.visibleTabs();
+
+    for (const tab of V.$$('#tabbar .tab')) {
+      tab.hidden = !visible.includes(tab.dataset.view);
+    }
+    if (!visible.includes(app.state.view)) app.go('today');
+
+    // Tell the service worker which data files not to keep for offline use. Best effort:
+    // if there is no worker (file://, or the very first load before it activates) the
+    // app is unaffected — this only controls what is held in the offline cache.
+    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({
+        type: 'setFeatures',
+        skip: V.features.skippedPaths(app.settings),
+      });
+    }
+  };
+
   app.go = function (name) {
     if (!VIEW_IDS.includes(name)) return;
     app.state.view = name;
@@ -120,10 +152,36 @@
     V.$('#btn-date').addEventListener('click', () => V.calendar.open(app.state.date));
 
     V.$('#sheet-close').addEventListener('click', () => V.ui.closeSheet());
-    V.$('#sheet-backdrop').addEventListener('click', (e) => {
-      // Only a tap on the dimmed area closes; taps inside the sheet must not.
-      if (e.target.id === 'sheet-backdrop') V.ui.closeSheet();
+
+    /*
+     * Tap-outside-to-close, without eating text selections.
+     *
+     * This cannot be done with a `click` listener. A click fires on the nearest common
+     * ancestor of where the press started and where it ended — so highlighting a sentence
+     * inside the sheet and releasing a few pixels past its edge produces a click whose
+     * target is the backdrop, and the sheet closes, taking the selection with it. Anyone
+     * trying to copy a number out of a sheet hit this every time.
+     *
+     * So the gesture has to both START and END on the dimmed area. A press that begins on
+     * the sheet is a selection or a drag and is none of the backdrop's business; a press
+     * that begins outside and wanders in is an aborted dismissal and should also do
+     * nothing.
+     */
+    const backdrop = V.$('#sheet-backdrop');
+    let pressStartedOnBackdrop = false;
+
+    backdrop.addEventListener('pointerdown', (e) => {
+      pressStartedOnBackdrop = e.target === backdrop;
     });
+    backdrop.addEventListener('pointerup', (e) => {
+      const dismiss = pressStartedOnBackdrop && e.target === backdrop;
+      pressStartedOnBackdrop = false;
+      if (dismiss) V.ui.closeSheet();
+    });
+    // A pointer that is cancelled (the browser taking over for a scroll or a system
+    // gesture) never produces a pointerup, so the flag has to be cleared here too or the
+    // next release anywhere on the backdrop would close a sheet the user never touched.
+    backdrop.addEventListener('pointercancel', () => { pressStartedOnBackdrop = false; });
 
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && V.ui.sheetOpen()) V.ui.closeSheet();
@@ -157,17 +215,100 @@
 
   // ----------------------------------------------------------------- boot --
 
+  /**
+   * Last-resort screen when storage cannot be opened at all.
+   *
+   * Deliberately built with real elements and theme tokens rather than a blob of inline
+   * HTML in a hardcoded dark palette — this used to flash a dark screen at light-theme
+   * users and read as the app having vanished. `blocked` gets its own copy because it is
+   * a completely different problem from a browser refusing storage, and the fix is one
+   * the user can actually carry out.
+   */
+  function showStorageFailure(err) {
+    const blocked = err && err.name === 'BlockedError';
+    /*
+     * A VersionError means the stored database is NEWER than this code expects, which
+     * only happens one way: the browser is running an out-of-date copy of the app against
+     * data a newer copy already upgraded. In practice that is a stale service-worker
+     * cache. Worth its own message, because the instinct on seeing a storage error is to
+     * clear site data — and here that would delete a perfectly good database to fix a
+     * stale script.
+     */
+    const stale = err && err.name === 'VersionError';
+
+    let heading = 'Storage unavailable';
+    let message = 'Ygeia needs IndexedDB to store your data. This usually means private ' +
+                  'browsing is on, or the browser is blocking site data.';
+    if (blocked) {
+      heading = 'Ygeia is open somewhere else';
+      message = err.message;
+    } else if (stale) {
+      heading = 'This copy of Ygeia is out of date';
+      message = 'Your data was saved by a newer version of the app than the one your ' +
+                'browser has loaded — almost always an old cached copy. Reload to fetch ' +
+                'the current version. Do NOT clear your site data: your data is fine, it ' +
+                'is the app that is behind.';
+    }
+
+    document.body.innerHTML = '';
+    document.body.appendChild(
+      V.el('div', { className: 'boot-error' }, [
+        V.el('h2', { text: heading }),
+        V.el('p', { text: message }),
+        (!blocked && !stale)
+          ? V.el('p', { className: 'boot-error-detail', text: String(err && err.message ? err.message : err) })
+          : null,
+        V.el('button', {
+          className: 'btn btn-primary', type: 'button', text: 'Reload',
+          on: { click: () => location.reload() },
+        }),
+        stale
+          ? V.el('button', {
+              className: 'btn btn-ghost', type: 'button', text: 'Clear the app cache and reload',
+              style: { marginTop: '8px' },
+              on: {
+                click: async () => {
+                  // Caches and service workers only — never IndexedDB, which holds the data.
+                  try {
+                    if (window.caches) for (const k of await caches.keys()) await caches.delete(k);
+                    if (navigator.serviceWorker) {
+                      for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister();
+                    }
+                  } catch (e) { /* Reloading is still worth a try. */ }
+                  location.reload();
+                },
+              },
+            })
+          : null,
+        V.el('p', {
+          className: 'boot-error-detail',
+          text: 'Your data is safe either way — nothing here deletes it.',
+        }),
+      ]),
+    );
+  }
+
   async function boot() {
     try {
       await V.store.open();
     } catch (err) {
-      document.body.innerHTML =
-        '<div style="padding:32px;font-family:system-ui;color:#E8EDF2;background:#0B0D10;min-height:100vh">' +
-        '<h2>Storage unavailable</h2><p>Ygeia needs IndexedDB to store your data. ' +
-        'This usually means private browsing is on, or the browser is blocking site data.</p>' +
-        '<p style="color:#8A94A3">' + V.esc(err.message) + '</p></div>';
+      console.error('[Ygeia] storage open failed:', err);
+      showStorageFailure(err);
       return;
     }
+
+    /*
+     * If another tab upgrades the schema while this one is running, our connection is
+     * closed out from under us and every later read would fail with an obscure
+     * InvalidStateError. Say so plainly instead, and offer the reload that fixes it.
+     */
+    V.store.setSupersededHandler(() => {
+      showStorageFailure(Object.assign(
+        new Error('Ygeia was updated in another tab, so this one is now out of date. ' +
+                  'Reload to pick up the new version.'),
+        { name: 'BlockedError' },
+      ));
+    });
 
     await seedIfNeeded();
     await app.applyTheme();
@@ -180,6 +321,7 @@
     }
 
     wireChrome();
+    await app.applyFeatures();
     app.go('today');
 
     // First run: ask for the body the calculations need. Every step is skippable, and it

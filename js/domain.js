@@ -54,25 +54,71 @@
     return D.bmr(p) * (D.ACTIVITY_MULTIPLIER[p.activityLevel] || 1.55);
   };
 
-  /** Calorie target for the profile's goal, floored at BMR so it can never be unsafe. */
+  /**
+   * Safety margin against under-logging, as a fraction of the target.
+   *
+   * Two errors both push the same way and both favour eating more than you meant to:
+   * Mifflin-St Jeor predicts an individual's expenditure to roughly ±10%, and portions
+   * are routinely underestimated by considerably more than that. Aiming at the bottom of
+   * the estimate rather than its middle means the usual error lands you on target instead
+   * of over it.
+   *
+   * Off by default. Silently lowering somebody's calorie target is not a decision an app
+   * gets to make on its own, so it is opt-in, visible, and stated wherever the target is.
+   */
+  D.DEFAULT_CALORIE_MARGIN = 0.1;
+  D.MAX_CALORIE_MARGIN = 0.2;
+
+  /**
+   * Calorie target for the profile's goal.
+   *
+   * Floored at BMR so it can never be unsafe — that floor applies AFTER the margin, which
+   * is the whole reason the margin is safe to offer. Someone small, sedentary and cutting
+   * cannot be driven into a dangerous deficit by turning it on; the floor absorbs it.
+   */
   D.calorieTarget = function (p) {
-    const raw = D.tdee(p) * (D.GOAL_MULTIPLIER[p.goal] != null ? D.GOAL_MULTIPLIER[p.goal] : 1);
+    const goalMult = D.GOAL_MULTIPLIER[p.goal] != null ? D.GOAL_MULTIPLIER[p.goal] : 1;
+    const margin = V.clamp(p.calorieMargin || 0, 0, D.MAX_CALORIE_MARGIN);
+    const raw = D.tdee(p) * goalMult * (1 - margin);
     return Math.round(Math.max(raw, D.bmr(p)));
   };
+
+  /** The same target with no margin applied — shown alongside so the shift is visible. */
+  D.calorieTargetUnadjusted = function (p) {
+    return D.calorieTarget(Object.assign({}, p, { calorieMargin: 0 }));
+  };
+
+  /** Is the margin actually changing anything, or has the BMR floor absorbed it? */
+  D.marginApplied = function (p) {
+    const full = D.calorieTargetUnadjusted(p);
+    const trimmed = D.calorieTarget(p);
+    return { full, trimmed, difference: full - trimmed, floored: trimmed <= Math.round(D.bmr(p)) };
+  };
+
+  /**
+   * Protein, in grams per kg of bodyweight.
+   *
+   * 2.2 g/kg sits at the top of the range the evidence supports. Muscle-growth benefit
+   * plateaus around 1.6 (Morton et al., BJSM 2018), so the extra is not buying more
+   * growth — what it buys is margin. Protein is the macro people most often
+   * under-consume and under-log, it is the most satiating per calorie, and in a deficit
+   * a higher intake is what preserves lean mass (Helms et al., IJSNEM 2014). Overshooting
+   * a target that plateaus costs nothing; undershooting one that matters does.
+   */
+  D.DEFAULT_PROTEIN_PER_KG = 2.2;
 
   /**
    * Macro targets derived from bodyweight rather than fixed percentages.
    *
-   * Protein is set per kg (default 1.8 g/kg — inside the 1.6–2.2 range where the
-   * resistance-training benefit plateaus). Fat is the greater of 25% of calories and
-   * 0.6 g/kg, keeping hormone-supporting intake adequate even in a deficit. Carbohydrate
-   * absorbs the remainder, so it flexes with the calorie goal instead of squeezing protein.
+   * Fat is the greater of 25% of calories and 0.6 g/kg, keeping hormone-supporting intake
+   * adequate even in a deficit. Carbohydrate absorbs the remainder, so it flexes with the
+   * calorie goal instead of squeezing protein.
    *
    * Any of the four can be overridden by the user; overrides win untouched.
    */
   D.macroTargets = function (settings) {
     const kcal = settings.kcalOverride != null ? settings.kcalOverride : D.calorieTarget(settings);
-    const proteinPerKg = settings.proteinPerKg || 1.8;
+    const proteinPerKg = settings.proteinPerKg || D.DEFAULT_PROTEIN_PER_KG;
 
     let protein = settings.proteinOverride != null
       ? settings.proteinOverride

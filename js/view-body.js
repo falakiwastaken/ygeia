@@ -4,29 +4,80 @@
 
   V.views = V.views || {};
 
-  /** Display metadata per metric. `dp` controls rounding; `higherIsBetter` colours deltas. */
+  /**
+   * Display metadata per metric. `dp` controls rounding; `higherIsBetter` colours deltas.
+   *
+   * Optional keys:
+   *   group     which section of the Body tab it appears under (see GROUPS)
+   *   convert   'weight' | 'temp' — stored canonically, shown in the user's unit
+   *   band      (value, ctx) => {label, color} — the interpretation line under the value
+   *   aggregate (values[]) => number — how same-day samples collapse; default is the mean
+   *
+   * Band and aggregate are wrapped rather than referenced directly so they resolve at
+   * call time. This array is built when the file loads, and load order should not be
+   * able to silently turn one of them into undefined.
+   */
   const METRICS = [
-    { type: 'weight',        label: 'Weight',         unit: 'kg',   dp: 1, convert: true,  color: 'var(--info)' },
-    { type: 'body_fat_pct',  label: 'Body fat',       unit: '%',    dp: 1, higherIsBetter: false, color: 'var(--strain)' },
-    { type: 'lean_mass',     label: 'Lean mass',      unit: 'kg',   dp: 1, convert: true, higherIsBetter: true, color: 'var(--recovery)' },
-    { type: 'resting_hr',    label: 'Resting HR',     unit: 'bpm',  dp: 0, higherIsBetter: false, color: 'var(--stress)' },
-    { type: 'hrv',           label: 'HRV (SDNN)',     unit: 'ms',   dp: 0, higherIsBetter: true,  color: 'var(--recovery)' },
-    { type: 'systolic',      label: 'Systolic BP',    unit: 'mmHg', dp: 0, higherIsBetter: false, color: 'var(--stress)' },
-    { type: 'diastolic',     label: 'Diastolic BP',   unit: 'mmHg', dp: 0, higherIsBetter: false, color: 'var(--stress)' },
-    { type: 'sleep_hours',   label: 'Sleep',          unit: 'h',    dp: 1, higherIsBetter: true,  color: 'var(--sleep)' },
-    { type: 'steps',         label: 'Steps',          unit: '',     dp: 0, higherIsBetter: true,  color: 'var(--strain)' },
-    { type: 'vo2max',        label: 'VO₂ max',        unit: '',     dp: 1, higherIsBetter: true,  color: 'var(--recovery)' },
+    { type: 'weight',        label: 'Weight',         unit: 'kg',   dp: 1, group: 'composition', convert: 'weight', color: 'var(--info)' },
+    { type: 'body_fat_pct',  label: 'Body fat',       unit: '%',    dp: 1, group: 'composition', higherIsBetter: false, color: 'var(--strain)' },
+    { type: 'lean_mass',     label: 'Lean mass',      unit: 'kg',   dp: 1, group: 'composition', convert: 'weight', higherIsBetter: true, color: 'var(--recovery)' },
+
+    { type: 'resting_hr',    label: 'Resting HR',     unit: 'bpm',  dp: 0, group: 'vitals', higherIsBetter: false, color: 'var(--stress)',
+      band: (v) => V.vitals.restingHrBand(v) },
+    { type: 'hrv',           label: 'HRV (SDNN)',     unit: 'ms',   dp: 0, group: 'vitals', higherIsBetter: true,  color: 'var(--recovery)',
+      band: (v, ctx) => V.vitals.hrvBand(v, ctx.baseline) },
+    { type: 'respiratory_rate', label: 'Respiratory rate', unit: 'br/min', dp: 0, group: 'vitals', higherIsBetter: false, color: 'var(--info)',
+      band: (v) => V.vitals.respiratoryRateBand(v) },
+    { type: 'spo2',          label: 'Blood oxygen',   unit: '%',    dp: 0, group: 'vitals', higherIsBetter: true, color: 'var(--recovery)',
+      band: (v) => V.vitals.spo2Band(v), caveat: (v) => V.vitals.spo2Caveat(v) },
+    { type: 'systolic',      label: 'Systolic BP',    unit: 'mmHg', dp: 0, group: 'vitals', higherIsBetter: false, color: 'var(--stress)' },
+    { type: 'diastolic',     label: 'Diastolic BP',   unit: 'mmHg', dp: 0, group: 'vitals', higherIsBetter: false, color: 'var(--stress)' },
+    { type: 'body_temp',     label: 'Body temperature', unit: '°C', dp: 1, group: 'vitals', convert: 'temp', color: 'var(--warn)',
+      band: (v) => V.vitals.bodyTempBand(v) },
+
+    { type: 'sound_exposure',     label: 'Environmental sound', unit: 'dBA', dp: 0, group: 'hearing', higherIsBetter: false, color: 'var(--sound)',
+      band: (v) => V.sound.band(v), aggregate: (vals) => V.sound.meanDb(vals) },
+    { type: 'headphone_exposure', label: 'Headphone sound',     unit: 'dBA', dp: 0, group: 'hearing', higherIsBetter: false, color: 'var(--sound)',
+      band: (v) => V.sound.band(v), aggregate: (vals) => V.sound.meanDb(vals) },
+
+    { type: 'sleep_hours',   label: 'Sleep',          unit: 'h',    dp: 1, group: 'activity', higherIsBetter: true,  color: 'var(--sleep)' },
+    { type: 'steps',         label: 'Steps',          unit: '',     dp: 0, group: 'activity', higherIsBetter: true,  color: 'var(--strain)' },
+    { type: 'vo2max',        label: 'VO₂ max',        unit: '',     dp: 1, group: 'activity', higherIsBetter: true,  color: 'var(--recovery)' },
   ];
 
-  /** Weight-like metrics are stored in kg and displayed in the user's chosen unit. */
-  function toDisplay(meta, valueKg, settings) {
-    return meta.convert ? V.kgToDisplay(valueKg, settings.weightUnit) : valueKg;
+  /** Section order and headings for the measurement list. */
+  const GROUPS = [
+    { key: 'composition', label: 'Body composition' },
+    { key: 'vitals',      label: 'Vitals' },
+    { key: 'hearing',     label: 'Hearing' },
+    { key: 'activity',    label: 'Activity & sleep' },
+  ];
+
+  /** Metrics are stored canonically (kg, °C) and displayed in the user's chosen unit. */
+  function toDisplay(meta, value, settings) {
+    if (meta.convert === 'weight') return V.kgToDisplay(value, settings.weightUnit);
+    if (meta.convert === 'temp') return V.cToDisplay(value, settings.tempUnit);
+    return value;
   }
   function fromDisplay(meta, value, settings) {
-    return meta.convert ? V.displayToKg(value, settings.weightUnit) : value;
+    if (meta.convert === 'weight') return V.displayToKg(value, settings.weightUnit);
+    if (meta.convert === 'temp') return V.displayToC(value, settings.tempUnit);
+    return value;
   }
   function unitLabel(meta, settings) {
-    return meta.convert ? settings.weightUnit : meta.unit;
+    if (meta.convert === 'weight') return settings.weightUnit;
+    if (meta.convert === 'temp') return settings.tempUnit === 'f' ? '°F' : '°C';
+    return meta.unit;
+  }
+
+  /**
+   * Interpretation band for a reading, in canonical units.
+   * `daily` is passed so bands that need the person's own history (HRV) can build one.
+   */
+  function bandFor(meta, canonicalValue, daily) {
+    if (!meta.band) return null;
+    const baseline = V.vitals.baseline(daily);
+    return meta.band(canonicalValue, { baseline, daily });
   }
 
   // ============================================================= detail sheet
@@ -34,8 +85,26 @@
   function openMetricSheet(meta) {
     V.ui.sheet(meta.label, async (body) => {
       const settings = await V.store.settings.get();
-      const daily = await V.store.metrics.daily(meta.type);
+      const daily = await V.store.metrics.daily(meta.type, meta.aggregate);
       const u = unitLabel(meta, settings);
+
+      // ---- Where this reading sits ----------------------------------------
+      if (daily.length) {
+        const latestValue = daily[daily.length - 1].value;
+        const band = bandFor(meta, latestValue, daily);
+        if (band) {
+          body.appendChild(
+            V.el('div', {
+              className: 'band-line',
+              style: { color: band.color },
+              text: `${V.fmt(toDisplay(meta, latestValue, settings), meta.dp)} ${u} — ${band.label}`,
+            }),
+          );
+        }
+        if (meta.caveat) {
+          body.appendChild(V.el('div', { className: 'hint', text: meta.caveat(latestValue) }));
+        }
+      }
 
       // ---- Log a value ----------------------------------------------------
       const input = V.ui.input({
@@ -243,29 +312,36 @@
       }
 
       // ---- Weight cut -------------------------------------------------------
-      const activeCut = await V.store.cuts.active();
-      root.appendChild(
-        V.ui.list([
-          V.ui.row({
-            title: 'Weight cut',
-            sub: activeCut
-              ? `${activeCut.name} · weigh-in ${V.friendlyDate(V.dateKey(new Date(activeCut.weighInAt)))}`
-              : 'For combat sports — plan a cut safely',
-            value: activeCut ? '●' : '›',
-            onClick: () => (activeCut ? V.cutView.openCutSheet() : V.cutView.openNewCutSheet()),
-          }),
-        ]),
-      );
+      const hearingOn = V.features.enabled(settings, 'hearing');
 
-      const rows = [];
+      if (V.features.enabled(settings, 'cut')) {
+        const activeCut = await V.store.cuts.active();
+        root.appendChild(
+          V.ui.list([
+            V.ui.row({
+              title: 'Weight cut',
+              sub: activeCut
+                ? `${activeCut.name} · weigh-in ${V.friendlyDate(V.dateKey(new Date(activeCut.weighInAt)))}`
+                : 'For combat sports — plan a cut safely',
+              value: activeCut ? '●' : '›',
+              onClick: () => (activeCut ? V.cutView.openCutSheet() : V.cutView.openNewCutSheet()),
+            }),
+          ]),
+        );
+      }
+
+      const rowsByGroup = {};
       let anyData = false;
 
       for (const meta of METRICS) {
-        const daily = await V.store.metrics.daily(meta.type);
+        // Skip the query entirely for a group that is switched off.
+        if (meta.group === 'hearing' && !hearingOn) continue;
+        const daily = await V.store.metrics.daily(meta.type, meta.aggregate);
         const u = unitLabel(meta, settings);
+        const group = (rowsByGroup[meta.group] = rowsByGroup[meta.group] || []);
 
         if (!daily.length) {
-          rows.push(
+          group.push(
             V.ui.row({
               title: meta.label,
               sub: 'No data',
@@ -280,13 +356,18 @@
         const latest = daily[daily.length - 1];
         const display = daily.map((d) => ({ date: d.date, value: toDisplay(meta, d.value, settings) }));
         const trend = V.domain.trend(display.slice(-30), 30);
+        const band = bandFor(meta, latest.value, daily);
 
-        rows.push(
+        group.push(
           V.ui.row({
             title: meta.label,
-            sub: trend && trend.reliable
-              ? `${trend.perWeek >= 0 ? '+' : ''}${V.fmt(trend.perWeek, meta.dp + 1)} ${u}/week`
-              : V.friendlyDate(latest.date),
+            // The band says more than the slope, so it wins the subtitle where there is one.
+            sub: band
+              ? band.label
+              : trend && trend.reliable
+                ? `${trend.perWeek >= 0 ? '+' : ''}${V.fmt(trend.perWeek, meta.dp + 1)} ${u}/week`
+                : V.friendlyDate(latest.date),
+            subColor: band ? band.color : null,
             value: V.fmt(toDisplay(meta, latest.value, settings), meta.dp) + ' ' + u,
             accessory: display.length >= 3
               ? V.charts.sparkline(display.slice(-20).map((d) => d.value), { color: meta.color })
@@ -296,8 +377,24 @@
         );
       }
 
-      root.appendChild(V.ui.sectionTitle('Measurements'));
-      root.appendChild(V.ui.list(rows));
+      const headphoneCard = hearingOn ? await V.soundView.buildHeadphoneCard() : null;
+
+      for (const g of GROUPS) {
+        if (g.key === 'hearing' && !hearingOn) continue;
+        const rows = rowsByGroup[g.key];
+        if (!rows || !rows.length) continue;
+        root.appendChild(V.ui.sectionTitle(g.label));
+
+        if (g.key === 'hearing') {
+          if (headphoneCard) root.appendChild(headphoneCard);
+          root.appendChild(
+            V.ui.button('Measure the room now', () => V.soundView.openMeterSheet(), 'btn-primary'),
+          );
+          root.appendChild(V.el('div', { style: { height: '10px' } }));
+        }
+
+        root.appendChild(V.ui.list(rows));
+      }
 
       if (!anyData) {
         root.appendChild(

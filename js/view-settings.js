@@ -6,6 +6,73 @@
 
   // ============================================================ profile sheet
 
+  /**
+   * Set the four daily targets directly, in the units they are actually tracked in.
+   *
+   * This replaced the old "protein g/kg" field on the profile. Grams per kilogram is a
+   * rule for deriving a target, not a target — and it needed the user to do arithmetic to
+   * find out what it meant for them. Leaving any box blank keeps that macro derived from
+   * the profile, so it is possible to pin protein and let carbohydrate keep flexing.
+   */
+  function openTargetsSheet() {
+    V.ui.sheet('Set targets by hand', async (body) => {
+      const s = await V.store.settings.get();
+      const derived = V.domain.macroTargets(Object.assign({}, s, {
+        kcalOverride: null, proteinOverride: null, carbsOverride: null, fatOverride: null,
+      }));
+
+      const field = (label, key, unit) => {
+        const input = V.ui.input({
+          type: 'number', step: '1',
+          value: s[key] != null ? String(s[key]) : '',
+          placeholder: String(derived[unit]),
+        });
+        return { input, key, unit, label };
+      };
+
+      const rows = [
+        field('Calories', 'kcalOverride', 'kcal'),
+        field('Protein (g)', 'proteinOverride', 'protein'),
+        field('Carbs (g)', 'carbsOverride', 'carbs'),
+        field('Fat (g)', 'fatOverride', 'fat'),
+      ];
+
+      body.appendChild(
+        V.el('div', {
+          className: 'hint',
+          style: { marginTop: '0' },
+          text: 'Leave a box empty to keep that one calculated from your profile. The ' +
+                'greyed-out number is what the profile currently works out to.',
+        }),
+      );
+      for (const r of rows) body.appendChild(V.ui.field(r.label, r.input));
+
+      body.appendChild(V.el('div', { style: { height: '12px' } }));
+      body.appendChild(
+        V.ui.button('Save', async () => {
+          const patch = {};
+          for (const r of rows) {
+            const raw = r.input.value.trim();
+            // Empty means "go back to derived", which is not the same as zero.
+            patch[r.key] = raw === '' ? null : Math.max(0, V.ui.num(r.input, 0));
+          }
+          await V.store.settings.set(patch);
+          V.ui.closeSheet();
+          V.toast('Targets saved');
+          V.app.render();
+        }, 'btn-primary'),
+      );
+      body.appendChild(
+        V.el('div', {
+          className: 'hint',
+          text: 'Calories are not recalculated from the macros you set, or the other way ' +
+                'round. Whatever you type is what the app tracks against, so the four can ' +
+                'disagree if you want them to.',
+        }),
+      );
+    });
+  }
+
   function openProfileSheet() {
     V.ui.sheet('Profile & targets', async (body) => {
       const s = await V.store.settings.get();
@@ -19,8 +86,6 @@
         type: 'number', step: '0.1',
         value: String(V.round(V.kgToDisplay(s.weightKg, s.weightUnit), 1)),
       });
-      const proteinPerKg = V.ui.input({ type: 'number', step: '0.1', value: String(s.proteinPerKg) });
-
       let sex = s.sex, activity = s.activityLevel, goal = s.goal;
 
       const sexWrap = V.el('div');
@@ -36,7 +101,10 @@
           weightKg: V.displayToKg(V.ui.num(weight, 75), s.weightUnit),
           activityLevel: activity,
           goal,
-          proteinPerKg: V.ui.num(proteinPerKg, 1.8),
+          // Protein per kg is no longer a field. It is a fixed 2.2 g/kg — the top of the
+          // supported range — and anyone who wants a different number sets the gram
+          // target directly under Targets, which is the more direct control anyway.
+          proteinPerKg: V.domain.DEFAULT_PROTEIN_PER_KG,
           // Overrides are deliberately ignored here so the preview shows what the
           // profile *would* produce, which is what the user is editing.
         };
@@ -97,16 +165,15 @@
         );
       }
 
-      for (const inp of [age, height, weight, proteinPerKg]) inp.addEventListener('input', renderAll);
+      for (const inp of [age, height, weight]) inp.addEventListener('input', renderAll);
 
       body.appendChild(V.ui.field('Sex (for BMR equation)', sexWrap,
         'Mifflin-St Jeor uses a sex term. "Prefer not to say" averages the two constants.'));
       body.appendChild(V.el('div', { className: 'grid-2' }, [
         V.ui.field('Age', age),
         V.ui.field(`Height (${s.heightUnit})`, height),
-        V.ui.field(`Weight (${s.weightUnit})`, weight),
-        V.ui.field('Protein g/kg', proteinPerKg),
       ]));
+      body.appendChild(V.ui.field(`Weight (${s.weightUnit})`, weight));
       body.appendChild(V.ui.field('Activity level', actWrap));
       body.appendChild(V.ui.field('Goal', goalWrap));
       body.appendChild(V.ui.sectionTitle('Calculated'));
@@ -440,13 +507,22 @@
               V.ui.stat({ label: 'Carbs', value: V.fmt(targets.carbs), unit: ' g' }),
               V.ui.stat({ label: 'Fat', value: V.fmt(targets.fat), unit: ' g' }),
             ]),
+            V.el('div', { className: 'hint', text: `Protein is ${V.domain.DEFAULT_PROTEIN_PER_KG} g per kg of ` +
+              'bodyweight — the top of the range the evidence supports. Set a number ' +
+              'yourself below if you want a different one.' }),
             V.el('div', { style: { height: '12px' } }),
             V.ui.button('Edit profile & goal', openProfileSheet, 'btn-primary'),
-            s.kcalOverride != null
+            V.el('div', { style: { height: '8px' } }),
+            V.ui.button('Set targets by hand', openTargetsSheet, 'btn-ghost'),
+            (s.kcalOverride != null || s.proteinOverride != null ||
+             s.carbsOverride != null || s.fatOverride != null)
               ? V.el('div', {}, [
                   V.el('div', { style: { height: '8px' } }),
                   V.ui.button('Reset to calculated', async () => {
-                    await V.store.settings.set({ kcalOverride: null });
+                    await V.store.settings.set({
+                      kcalOverride: null, proteinOverride: null,
+                      carbsOverride: null, fatOverride: null,
+                    });
                     V.toast('Reset');
                     V.app.render();
                   }, 'btn-ghost'),
@@ -457,6 +533,82 @@
       );
 
       // ---- Units and appearance --------------------------------------------
+      root.appendChild(V.ui.sectionTitle('Calorie target'));
+      const marginWrap = V.el('div');
+      function renderMargin() {
+        marginWrap.innerHTML = '';
+        const applied = V.domain.marginApplied(s);
+        marginWrap.appendChild(
+          V.ui.list([
+            V.ui.row({
+              title: 'Safety margin',
+              sub: s.calorieMargin
+                ? `Aiming ${Math.round(s.calorieMargin * 100)}% low — ` +
+                  `${V.fmt(applied.trimmed)} instead of ${V.fmt(applied.full)} kcal`
+                : 'Off — using the full estimate',
+              accessory: V.ui.segmented(
+                [
+                  { value: 0, label: 'Off' },
+                  { value: 0.05, label: '5%' },
+                  { value: 0.1, label: '10%' },
+                  { value: 0.15, label: '15%' },
+                ],
+                s.calorieMargin || 0,
+                async (v) => {
+                  await V.store.settings.set({ calorieMargin: v });
+                  s.calorieMargin = v;
+                  renderMargin();
+                  V.app.render();
+                },
+              ),
+            }),
+          ]),
+        );
+        marginWrap.appendChild(
+          V.el('div', {
+            className: 'hint',
+            text: 'Calorie estimates are wrong in a predictable direction: the BMR equation ' +
+                  'is only good to about ±10% for any one person, and portions are almost ' +
+                  'always under-estimated rather than over. Aiming at the bottom of the ' +
+                  'range means the usual error lands you on target instead of over it. ' +
+                  'The target is never taken below your BMR whatever you pick here.',
+          }),
+        );
+        if (s.calorieMargin && applied.floored) {
+          marginWrap.appendChild(
+            V.el('div', {
+              className: 'warn-box',
+              text: 'Your target is already at your BMR floor, so the margin is not lowering ' +
+                    'it any further. Eating below BMR is not something this app will suggest.',
+            }),
+          );
+        }
+      }
+      renderMargin();
+      root.appendChild(marginWrap);
+
+      root.appendChild(V.ui.sectionTitle('Features'));
+      const featureCount = V.features.summary(s);
+      root.appendChild(
+        V.ui.list([
+          V.ui.row({
+            title: 'Choose what you use',
+            sub: `${featureCount.on} of ${featureCount.total} optional features on`,
+            value: '›',
+            onClick: () => V.featuresView.openSheet(),
+          }),
+          V.features.enabled(s, 'dailyQuestion')
+            ? V.ui.row({
+                title: 'Question of the day',
+                sub: (s.dailyQuestionPopup === false ? 'Opens from the card only' : 'Opens automatically on Study') +
+                     ` · ${s.studyLevel}`,
+                value: '›',
+                onClick: () => V.studyView.openDailySettings(),
+              })
+            : null,
+        ]),
+      );
+
       root.appendChild(V.ui.sectionTitle('Units & appearance'));
 
       const unitWrap = V.el('div');
@@ -478,6 +630,14 @@
                 [{ value: 'cm', label: 'cm' }, { value: 'in', label: 'in' }],
                 s.heightUnit,
                 async (v) => { await V.store.settings.set({ heightUnit: v }); s.heightUnit = v; renderUnits(); },
+              ),
+            }),
+            V.ui.row({
+              title: 'Temperature',
+              accessory: V.ui.segmented(
+                [{ value: 'c', label: '°C' }, { value: 'f', label: '°F' }],
+                s.tempUnit,
+                async (v) => { await V.store.settings.set({ tempUnit: v }); s.tempUnit = v; renderUnits(); V.app.render(); },
               ),
             }),
             V.ui.row({
