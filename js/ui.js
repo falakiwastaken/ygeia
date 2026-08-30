@@ -1,4 +1,4 @@
-﻿/* Ygeia — reusable UI pieces. Plain DOM construction, no framework. */
+/* Ygeia — reusable UI pieces. Plain DOM construction, no framework. */
 (function (V) {
   'use strict';
 
@@ -50,9 +50,23 @@
     mounted.teardown = [];
     mounted = null;
     for (const fn of fns) {
-      // One broken cleanup must not strand the others — a mic left recording is worse
-      // than a swallowed error.
-      try { fn(); } catch (err) { console.error('sheet teardown failed', err); }
+      /*
+       * One broken cleanup must not strand the others — a mic left recording is worse
+       * than a swallowed error.
+       *
+       * Some teardown callbacks are async (the notebook flushes its last unsaved
+       * keystrokes here). A bare `try { fn() }` returns the moment such a function hits
+       * its first await, so the catch could never see a rejection and the failure went to
+       * the console as an unhandled one. Handle both shapes.
+       */
+      try {
+        const r = fn();
+        if (r && typeof r.then === 'function') {
+          r.catch((err) => console.error('sheet teardown failed (async)', err));
+        }
+      } catch (err) {
+        console.error('sheet teardown failed', err);
+      }
     }
   }
 

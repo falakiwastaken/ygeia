@@ -1,4 +1,4 @@
-﻿/* Ygeia — Settings: profile, targets, data import/export. */
+/* Ygeia — Settings: profile, targets, data import/export. */
 (function (V) {
   'use strict';
 
@@ -300,7 +300,7 @@
           V.el('div', { className: 'warn-box', text: 'Encryption needs a secure context — open Ygeia over https:// or from localhost.' }),
         );
       } else {
-        const pass = V.ui.input({ type: 'password', placeholder: 'Passphrase (8+ characters)', autocomplete: 'new-password' });
+        const pass = V.ui.input({ type: 'password', placeholder: 'Passphrase (12+ characters)', autocomplete: 'new-password' });
         const confirmPass = V.ui.input({ type: 'password', placeholder: 'Repeat it', autocomplete: 'new-password' });
 
         body.appendChild(V.ui.field('Passphrase', pass));

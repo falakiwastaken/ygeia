@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Ygeia — weight cut UI for combat sports.
  *
  * Opened from the Body tab. The safety state produced by V.cut.plan() drives what this

@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Ygeia — Apple Health export importer.
  *
  * There is no browser API for HealthKit; a web app cannot read Apple Health directly.

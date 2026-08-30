@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Ygeia — calculation transparency.
  *
  * Every derived number in this app should be auditable. A health tracker that shows you a

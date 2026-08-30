@@ -195,16 +195,28 @@
         // ---- Summary strip --------------------------------------------------
         const byCat = V.groupBy(events, 'category');
         const tiles = [];
+        /*
+         * Sum `amount`, never the formatted `value`.
+         *
+         * These tiles used to re-parse the display string — `parseFloat` over
+         * `e.value.replace(/[^\d.]/g, '')`. `value` comes from `V.fmt`, which is
+         * `toLocaleString`, so in any locale that groups with dots — de-DE, es-ES, pt-BR,
+         * it-IT, nl-NL — "1.234 kcal" survived the strip as "1.234" and parsed to 1.234.
+         * A 1,234 kcal day read as 1 kcal. The timeline now carries the number alongside
+         * the text so nothing has to guess at how it was formatted.
+         */
         if (byCat.meal) {
-          const kcal = V.sum(byCat.meal, (e) => parseFloat(String(e.value).replace(/[^\d.]/g, '')) || 0);
+          const kcal = V.sum(byCat.meal, (e) => e.amount || 0);
           tiles.push(V.ui.stat({ label: 'Eaten', value: V.fmt(kcal), unit: ' kcal' }));
         }
         if (byCat.workout) tiles.push(V.ui.stat({ label: 'Workouts', value: String(byCat.workout.length) }));
         if (byCat.study) {
-          const mins = V.sum(byCat.study, (e) => parseInt(e.value, 10) || 0);
-          tiles.push(V.ui.stat({ label: 'Studied', value: String(mins), unit: ' min' }));
+          const mins = V.sum(byCat.study, (e) => e.amount || 0);
+          tiles.push(V.ui.stat({ label: 'Studied', value: V.fmt(mins), unit: ' min' }));
         }
-        if (byCat.sleep) tiles.push(V.ui.stat({ label: 'Slept', value: byCat.sleep[0].value.replace(' h', ''), unit: ' h' }));
+        if (byCat.sleep) {
+          tiles.push(V.ui.stat({ label: 'Slept', value: V.fmt(byCat.sleep[0].amount, 1), unit: ' h' }));
+        }
 
         if (tiles.length) {
           body.appendChild(V.el('div', { className: 'grid-' + Math.min(tiles.length, 3) }, tiles));

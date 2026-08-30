@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Ygeia — nearby places.
  *
  * Data comes from OpenStreetMap via the Overpass API: free, no key, no account, and
@@ -17,6 +17,23 @@
  */
 (function (V) {
   'use strict';
+
+  /**
+   * Accept only http(s) URLs, and return null for anything else.
+   *
+   * Everything this module renders comes from OpenStreetMap, where the tags are
+   * user-editable. `javascript:`, `data:` and `blob:` all have no business in a link the
+   * app hands the user.
+   */
+  function httpUrl(raw) {
+    if (!raw) return null;
+    try {
+      const u = new URL(String(raw), location.href);
+      return (u.protocol === 'http:' || u.protocol === 'https:') ? u.href : null;
+    } catch (err) {
+      return null;
+    }
+  }
 
   const OVERPASS = 'https://overpass-api.de/api/interpreter';
   const NOMINATIM = 'https://nominatim.openstreetmap.org/search';
@@ -249,10 +266,18 @@
 
       body.appendChild(V.ui.list(facts.map(([k, v]) => V.ui.row({ title: k, value: String(v) }))));
 
-      if (place.website) {
+      /*
+       * `place.website` comes from an OpenStreetMap tag, which is to say from a wiki that
+       * anybody can edit. Putting it straight into an href let a crafted `javascript:` value
+       * become a clickable link running in this origin, with full access to the database —
+       * blocked today only by `script-src 'self'`, which is one silently-regressible line
+       * standing between a public wiki and everything the app holds. Check the scheme.
+       */
+      const safeSite = httpUrl(place.website);
+      if (safeSite) {
         body.appendChild(V.el('div', { style: { height: '12px' } }));
         const link = V.el('a', {
-          href: place.website, target: '_blank', rel: 'noopener noreferrer',
+          href: safeSite, target: '_blank', rel: 'noopener noreferrer',
           className: 'btn', text: 'Open website (check the menu here)',
           style: { textDecoration: 'none' },
         });

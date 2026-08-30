@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Ygeia — bulk-store meal templates.
  *
  * Built around what warehouse stores (Costco, Sam's Club, Makro) and large supermarkets

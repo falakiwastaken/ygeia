@@ -31,7 +31,18 @@
   // Older tags still accepted on restore so early exports keep working.
   const ACCEPTED_PLAIN = [PLAIN_FORMAT, 'Ygeia-backup', 'vitals-backup'];
 
-  const ITERATIONS = 310000;
+  /*
+   * 310,000 is the OWASP figure for PBKDF2-HMAC-SHA1. This uses SHA-256, where the
+   * corresponding recommendation is 600,000 — so the old value was running at roughly half
+   * the intended strength for the hash actually in use.
+   *
+   * Raising it costs nothing in compatibility: `decrypt` reads the count out of the envelope
+   * rather than assuming this constant, so every backup written before this change still
+   * opens. The threat model here is not hypothetical — the UI tells people this file is safe
+   * to keep in iCloud or Dropbox, which is to say it assumes the ciphertext is already in
+   * someone else's hands.
+   */
+  const ITERATIONS = 600000;
 
   /**
    * The encrypted envelope, written out so a future reader does not have to guess:
@@ -55,7 +66,29 @@
 
   const enc = new TextEncoder();
   const dec = new TextDecoder();
-  const b64 = (buf) => btoa(String.fromCharCode.apply(null, new Uint8Array(buf)));
+
+  /*
+   * Base64, in chunks.
+   *
+   * This was `btoa(String.fromCharCode.apply(null, bytes))`, which spreads every byte into
+   * an argument list. JavaScriptCore caps that around 65,536 arguments and V8 around 125,000,
+   * so it threw `RangeError: Maximum call stack size exceeded` for any ciphertext past about
+   * 100 kB — which is to say, for every database with a few months in it. Encrypted export
+   * was broken for precisely the people with enough data to need it, and since the plain
+   * path does not come through here, the failure quietly pushed them to the UNENCRYPTED file.
+   *
+   * 0x8000 bytes per call stays an order of magnitude inside the smaller limit.
+   */
+  const B64_CHUNK = 0x8000;
+  const b64 = function (buf) {
+    const bytes = new Uint8Array(buf);
+    let out = '';
+    for (let i = 0; i < bytes.length; i += B64_CHUNK) {
+      out += String.fromCharCode.apply(null, bytes.subarray(i, i + B64_CHUNK));
+    }
+    return btoa(out);
+  };
+
   const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 
   // =========================================================================
@@ -121,7 +154,17 @@
 
   B.encrypt = async function (payload, passphrase) {
     if (!B.available()) throw new Error('Encryption needs a secure context — use https:// or localhost.');
-    if (!passphrase || passphrase.length < 8) throw new Error('Use a passphrase of at least 8 characters.');
+    /*
+     * 12, not 8. The UI tells people this file is safe to keep in iCloud, Drive, Dropbox or
+     * email — which means the threat model already assumes the ciphertext is in someone
+     * else's hands, and the passphrase is then the only thing standing between them and a
+     * readable health diary. Eight characters does not survive that; an offline attacker
+     * gets unlimited guesses at whatever rate their hardware allows.
+     */
+    if (!passphrase || passphrase.length < 12) {
+      throw new Error('Use a passphrase of at least 12 characters — this file is meant to be safe ' +
+                      'even if someone else gets hold of it.');
+    }
 
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -234,18 +277,43 @@
   B.restore = async function (payload) {
     if (!payload || !payload.stores) throw new Error('That backup has no data in it.');
 
+    /*
+     * Validate the whole file before touching anything.
+     *
+     * The previous version cleared each store and then wrote it back, store by store, in
+     * separate transactions. A rejection partway through — a malformed row, the quota, a
+     * closed tab — left one store empty, the stores before it replaced, and the stores after
+     * it untouched, with no rollback and nothing to tell the user which was which. Restoring
+     * a slightly bad backup was worse than not restoring at all.
+     */
+    const plan = {};
     let restored = 0;
     for (const name in payload.stores) {
-      if (!V.store.SCHEMA[name]) continue; // a store from a newer version
+      if (!V.store.SCHEMA[name]) continue; // a store from a newer version of the app
       const rows = payload.stores[name];
       if (!Array.isArray(rows)) continue;
-
-      await V.store.db.clear(name);
-      if (rows.length) {
-        await V.store.db.putMany(name, rows);
-        restored += rows.length;
-      }
+      plan[name] = rows;
+      restored += rows.length;
     }
+
+    if (!Object.keys(plan).length) throw new Error('That backup has no readable stores in it.');
+
+    /*
+     * `kv` carries the settings blob, and `collect` deliberately strips the passcode verifier
+     * and the API key from exports — so clearing `kv` wholesale would silently remove the
+     * lock and the stored key from THIS device on every restore. Carry them across.
+     */
+    const keep = [];
+    if (plan.kv) {
+      for (const key of ['auth', 'visionKey']) {
+        const existing = await V.store.db.get('kv', key);
+        if (existing) keep.push(existing);
+      }
+      plan.kv = plan.kv.filter((row) => !keep.some((k) => k.key === row.key)).concat(keep);
+    }
+
+    // One transaction across every store: it either all lands or none of it does.
+    await V.store.db.replaceStores(plan);
 
     V.store.settings.invalidate();
     return restored;

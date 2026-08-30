@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Ygeia — check-ins, accountability, meal planning, training programs and insights.
  *
  * These surfaces are shared across tabs rather than owning one, so they live together

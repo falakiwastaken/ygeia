@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Ygeia — training programs.
  *
  * Each program is a weekly template of exercise / sets / rep-range. Starting one generates

@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Ygeia — sleep and study.
  *
  * Pure functions. The two live together because they are genuinely coupled: sleep is
@@ -207,7 +207,23 @@
       next.lapses = (item.lapses || 0) + 1;
     }
 
-    next.dueDate = V.addDays(V.today(), S.LEITNER_INTERVALS[next.box]);
+    /*
+     * Schedule from the later of today and the card's own due date.
+     *
+     * This used to count forward from today unconditionally, which quietly punished
+     * reviewing early: a card due on the 20th, reviewed and remembered on the 15th, moved
+     * to 15 + interval rather than 20 + interval, permanently shortening its schedule. Do
+     * that a few times and a card meant to be on a 35-day cycle is being asked every
+     * fortnight, which is the opposite of what expanding intervals are for.
+     *
+     * A lapse is different: a card you have genuinely lost needs rebuilding from now,
+     * whatever its old due date said.
+     */
+    const from = remembered && item.dueDate && item.dueDate > V.today()
+      ? item.dueDate
+      : V.today();
+
+    next.dueDate = V.addDays(from, S.LEITNER_INTERVALS[next.box]);
     next.lastReviewedAt = Date.now();
     return next;
   };

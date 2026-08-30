@@ -2,7 +2,9 @@
 <html lang="en" data-theme="light">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<!-- No maximum-scale: blocking pinch-zoom is a WCAG 1.4.4 failure, and this is an app
+     full of small numbers that some people need to enlarge to read at all. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ygeia</title>
 <meta name="description" content="Free, open-source, offline-first lifestyle tracker. Nutrition, lifting, sport, sleep and study. Your data never leaves your device.">
 <meta name="theme-color" content="#F6F2E8">
@@ -11,7 +13,7 @@
   Content-Security-Policy.
 
   script-src is 'self' and nothing else. No CDN, no third-party code, no import() at
-  runtime — every line that executes here came from this repository. Ygeia briefly shipped
+  runtime — every line that executes here came from this repository. Ygeia briefly shipped
   an optional on-device model that pulled a runtime from a CDN; that code ran in this origin
   with full IndexedDB access and could not be pinned with an integrity hash, so removing it
   removed the only way untrusted code could ever reach your data.
@@ -47,7 +49,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 
-<link rel="stylesheet" href="css/app.css?v=37">
+<link rel="stylesheet" href="css/app.css?v=38">
 </head>
 <body>
 
@@ -100,17 +102,19 @@
   </nav>
 
   <div class="sheet-backdrop" id="sheet-backdrop" hidden>
-    <div class="sheet" id="sheet" role="dialog" aria-modal="true">
+    <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" tabindex="-1">
       <div class="sheet-grabber"></div>
       <div class="sheet-head">
         <h2 id="sheet-title"></h2>
-        <button class="icon-btn" id="sheet-close" aria-label="Close">×</button>
+        <button class="icon-btn" id="sheet-close" aria-label="Close">×</button>
       </div>
       <div class="sheet-body" id="sheet-body"></div>
     </div>
   </div>
 
-  <div id="toast" class="toast" hidden></div>
+  <!-- role="status" makes the app's only confirmation channel audible to a screen
+       reader; without it "Reading saved" and "Rest complete" happened silently. -->
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
   <!-- Local passcode lock. Covers everything until unlocked. -->
   <div id="lock-screen" hidden></div>
@@ -122,60 +126,60 @@
   Deliberately NOT ES modules: <script type="module"> is blocked by CORS on file:// URLs,
   and this app must run by opening index.html with no server and no build step.
 -->
-<script src="js/util.js?v=37"></script>
-<script src="js/store.js?v=37"></script>
-<script src="js/auth.js?v=37"></script>
-<script src="js/domain.js?v=37"></script>
-<script src="js/domain-life.js?v=37"></script>
-<script src="js/domain-cut.js?v=37"></script>
-<script src="js/domain-study.js?v=37"></script>
-<script src="js/domain-rank.js?v=37"></script>
-<script src="js/domain-plan.js?v=37"></script>
-<script src="js/domain-insights.js?v=37"></script>
-<script src="js/domain-timeline.js?v=37"></script>
-<script src="js/domain-gaps.js?v=37"></script>
-<script src="js/domain-vitals.js?v=37"></script>
-<script src="js/domain-sound.js?v=37"></script>
-<script src="js/domain-load.js?v=37"></script>
-<script src="js/domain-notebook.js?v=37"></script>
-<script src="js/domain-features.js?v=37"></script>
-<script src="js/data-meals.js?v=37"></script>
-<script src="js/data-programs.js?v=37"></script>
-<script src="js/data-daily.js?v=37"></script>
-<script src="js/explain.js?v=37"></script>
-<script src="js/data-foods.js?v=37"></script>
-<script src="js/data-exercises.js?v=37"></script>
-<script src="js/ui.js?v=37"></script>
-<script src="js/charts.js?v=37"></script>
-<script src="js/map.js?v=37"></script>
-<script src="js/openfoodfacts.js?v=37"></script>
-<script src="js/food-parser.js?v=37"></script>
-<script src="js/ai-prompt.js?v=37"></script>
-<script src="js/ai-providers.js?v=37"></script>
-<script src="js/ai-vision.js?v=37"></script>
-<script src="js/ai-cloud.js?v=37"></script>
-<script src="js/places.js?v=37"></script>
-<script src="js/healthimport.js?v=37"></script>
-<script src="js/backup.js?v=37"></script>
-<script src="js/view-today.js?v=37"></script>
-<script src="js/view-food.js?v=37"></script>
-<script src="js/view-train.js?v=37"></script>
-<script src="js/view-study.js?v=37"></script>
-<script src="js/view-notebook.js?v=37"></script>
-<script src="js/view-features.js?v=37"></script>
-<script src="js/view-sound.js?v=37"></script>
-<script src="js/view-flashcards.js?v=37"></script>
-<script src="js/view-solve.js?v=37"></script>
-<script src="js/view-scandeck.js?v=37"></script>
-<script src="js/view-aikey.js?v=37"></script>
-<script src="js/view-calendar.js?v=37"></script>
-<script src="js/view-coach.js?v=37"></script>
-<script src="js/view-body.js?v=37"></script>
-<script src="js/view-cut.js?v=37"></script>
-<script src="js/view-plan.js?v=37"></script>
-<script src="js/view-lock.js?v=37"></script>
-<script src="js/view-onboard.js?v=37"></script>
-<script src="js/view-settings.js?v=37"></script>
-<script src="js/app.js?v=37"></script>
+<script src="js/util.js?v=38"></script>
+<script src="js/store.js?v=38"></script>
+<script src="js/auth.js?v=38"></script>
+<script src="js/domain.js?v=38"></script>
+<script src="js/domain-life.js?v=38"></script>
+<script src="js/domain-cut.js?v=38"></script>
+<script src="js/domain-study.js?v=38"></script>
+<script src="js/domain-rank.js?v=38"></script>
+<script src="js/domain-plan.js?v=38"></script>
+<script src="js/domain-insights.js?v=38"></script>
+<script src="js/domain-timeline.js?v=38"></script>
+<script src="js/domain-gaps.js?v=38"></script>
+<script src="js/domain-vitals.js?v=38"></script>
+<script src="js/domain-sound.js?v=38"></script>
+<script src="js/domain-load.js?v=38"></script>
+<script src="js/domain-notebook.js?v=38"></script>
+<script src="js/domain-features.js?v=38"></script>
+<script src="js/data-meals.js?v=38"></script>
+<script src="js/data-programs.js?v=38"></script>
+<script src="js/data-daily.js?v=38"></script>
+<script src="js/explain.js?v=38"></script>
+<script src="js/data-foods.js?v=38"></script>
+<script src="js/data-exercises.js?v=38"></script>
+<script src="js/ui.js?v=38"></script>
+<script src="js/charts.js?v=38"></script>
+<script src="js/map.js?v=38"></script>
+<script src="js/openfoodfacts.js?v=38"></script>
+<script src="js/food-parser.js?v=38"></script>
+<script src="js/ai-prompt.js?v=38"></script>
+<script src="js/ai-providers.js?v=38"></script>
+<script src="js/ai-vision.js?v=38"></script>
+<script src="js/ai-cloud.js?v=38"></script>
+<script src="js/places.js?v=38"></script>
+<script src="js/healthimport.js?v=38"></script>
+<script src="js/backup.js?v=38"></script>
+<script src="js/view-today.js?v=38"></script>
+<script src="js/view-food.js?v=38"></script>
+<script src="js/view-train.js?v=38"></script>
+<script src="js/view-study.js?v=38"></script>
+<script src="js/view-notebook.js?v=38"></script>
+<script src="js/view-features.js?v=38"></script>
+<script src="js/view-sound.js?v=38"></script>
+<script src="js/view-flashcards.js?v=38"></script>
+<script src="js/view-solve.js?v=38"></script>
+<script src="js/view-scandeck.js?v=38"></script>
+<script src="js/view-aikey.js?v=38"></script>
+<script src="js/view-calendar.js?v=38"></script>
+<script src="js/view-coach.js?v=38"></script>
+<script src="js/view-body.js?v=38"></script>
+<script src="js/view-cut.js?v=38"></script>
+<script src="js/view-plan.js?v=38"></script>
+<script src="js/view-lock.js?v=38"></script>
+<script src="js/view-onboard.js?v=38"></script>
+<script src="js/view-settings.js?v=38"></script>
+<script src="js/app.js?v=38"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-﻿/* Ygeia — small shared helpers. Loaded first; everything else builds on window.V. */
+/* Ygeia — small shared helpers. Loaded first; everything else builds on window.V. */
 window.V = window.V || {};
 
 (function (V) {
@@ -162,10 +162,19 @@ window.V = window.V || {};
   V.toast = function (msg) {
     const t = V.$('#toast');
     if (!t) return;
-    t.textContent = msg;
+    /*
+     * Reveal first, then write.
+     *
+     * #toast is a role="status" live region, and a live region only announces changes that
+     * happen while it is actually in the accessibility tree. Setting the text before
+     * clearing `hidden` — which is what this used to do — means the change lands on a
+     * hidden node and screen readers say nothing, which is how the app's only confirmation
+     * channel stayed silent for anyone not looking at it.
+     */
     t.hidden = false;
+    t.textContent = msg;
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { t.hidden = true; }, 2200);
+    toastTimer = setTimeout(() => { t.hidden = true; t.textContent = ''; }, 2200);
   };
 
   V.haptic = function (ms) {

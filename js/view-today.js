@@ -1,4 +1,4 @@
-﻿/* Ygeia — Today: the day at a glance. */
+/* Ygeia — Today: the day at a glance. */
 (function (V) {
   'use strict';
 

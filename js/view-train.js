@@ -1,4 +1,4 @@
-﻿/* Ygeia — Train: live workout logging, progression, plate maths. */
+/* Ygeia — Train: live workout logging, progression, plate maths. */
 (function (V) {
   'use strict';
 

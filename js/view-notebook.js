@@ -19,6 +19,30 @@
   'use strict';
 
   /**
+   * Report a failed save instead of losing it silently.
+   *
+   * Every write in this file used to be an un-caught `await` inside a debounced async
+   * function. When one rejected — and the realistic cause is the storage quota, since
+   * stroke arrays grow without bound — the status stayed on "Saving…" forever, the promise
+   * rejected with nobody listening, and the page the user was writing on was simply gone.
+   * A note-taking surface that can lose a page without saying so is not one you can trust.
+   */
+  async function guardSave(status, fn) {
+    try {
+      await fn();
+      if (status) status.textContent = 'Saved';
+      return true;
+    } catch (err) {
+      console.error('[Ygeia] notebook save failed:', err);
+      if (status) status.textContent = 'Not saved';
+      V.toast(err && err.name === 'QuotaExceededError'
+        ? 'Storage is full — this page could not be saved. Free some space or export a backup.'
+        : 'Could not save this page.');
+      return false;
+    }
+  }
+
+  /**
    * Quick swatches.
    *
    * The first is the theme's ink token rather than a fixed colour, so a default stroke
@@ -242,12 +266,11 @@
 
     const status = V.el('div', { className: 'hint', text: 'Saved' });
 
-    const save = V.debounce(async () => {
+    const save = V.debounce(() => guardSave(status, async () => {
       page.text = area.value;
       await V.store.notebooks.savePage(page);
       await V.store.notebooks.save(nb);
-      status.textContent = 'Saved';
-    }, SAVE_MS);
+    }), SAVE_MS);
 
     area.addEventListener('input', () => {
       status.textContent = 'Saving…';
@@ -256,12 +279,13 @@
 
     // A debounced save can still be pending when the sheet closes. Flush it, or the last
     // few keystrokes before dismissal are lost — which is the moment people notice most.
-    V.ui.onSheetTeardown(async () => {
-      if (area.value !== (page.text || '')) {
+    V.ui.onSheetTeardown(() => {
+      if (area.value === (page.text || '')) return null;
+      return guardSave(null, async () => {
         page.text = area.value;
         await V.store.notebooks.savePage(page);
         await V.store.notebooks.save(nb);
-      }
+      });
     });
 
     body.appendChild(area);
@@ -452,13 +476,14 @@
     const status = V.el('div', { className: 'hint', text: 'Saved' });
     let dirty = false;
 
-    const save = V.debounce(async () => {
+    const save = V.debounce(() => guardSave(status, async () => {
       page.strokes = strokes;
       await V.store.notebooks.savePage(page);
       await V.store.notebooks.save(nb);
+      // Only clear the dirty flag once the write has actually landed, so a failure leaves
+      // the teardown flush still willing to retry it.
       dirty = false;
-      status.textContent = 'Saved';
-    }, SAVE_MS);
+    }), SAVE_MS);
 
     function markDirty() {
       dirty = true;
@@ -466,11 +491,13 @@
       save();
     }
 
-    V.ui.onSheetTeardown(async () => {
-      if (!dirty) return;
-      page.strokes = strokes;
-      await V.store.notebooks.savePage(page);
-      await V.store.notebooks.save(nb);
+    V.ui.onSheetTeardown(() => {
+      if (!dirty) return null;
+      return guardSave(null, async () => {
+        page.strokes = strokes;
+        await V.store.notebooks.savePage(page);
+        await V.store.notebooks.save(nb);
+      });
     });
 
     // ---- input ----------------------------------------------------------

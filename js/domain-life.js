@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Ygeia — body composition indices and sport energy expenditure.
  *
  * Pure functions. No DOM, no storage.

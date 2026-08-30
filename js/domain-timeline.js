@@ -76,6 +76,7 @@
         title: slot.charAt(0).toUpperCase() + slot.slice(1),
         detail: entries.map((e) => e.food.name).join(', '),
         value: V.fmt(kcal) + ' kcal',
+        amount: kcal,
         count: entries.length,
         ref: { type: 'meal', slot },
       });
@@ -96,6 +97,7 @@
           ? `${working.length} sets · ${V.fmt(V.domain.volume(sets))} kg volume`
           : 'In progress',
         value: minutes != null ? minutes + ' min' : '●',
+        amount: minutes != null ? minutes : null,
         ref: { type: 'workout', id: w.id },
       });
     }
@@ -108,6 +110,7 @@
         title: s.sport,
         detail: `${s.durationMin} min · ${s.intensity}`,
         value: V.fmt(s.calories) + ' kcal',
+        amount: s.calories,
         ref: { type: 'sport', id: s.id },
       });
     }
@@ -122,6 +125,7 @@
         title: subject ? subject.name : 'Study',
         detail: s.technique ? 'Focus block · ' + s.technique : 'Focus block',
         value: s.minutes + ' min',
+        amount: s.minutes,
         ref: { type: 'study', id: s.id },
       });
     }
@@ -136,6 +140,7 @@
         detail: `Slept ${V.study.formatTime(d.sleep.bedTimeMin)} – ${V.study.formatTime(d.sleep.wakeTimeMin)}` +
                 (d.sleep.quality ? ` · ${'★'.repeat(d.sleep.quality)}` : ''),
         value: V.fmt(d.sleep.hours, 1) + ' h',
+        amount: d.sleep.hours,
         ref: { type: 'sleep' },
       });
     }

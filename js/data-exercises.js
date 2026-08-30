@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Ygeia — bundled exercise library.
  *
  * ~130 movements covering the common barbell/dumbbell/machine/bodyweight vocabulary.

@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Ygeia — domain logic.
  *
  * Pure functions only: no DOM, no storage, no network. Everything here is deterministic

@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Ygeia — bundled offline food seed.
  *
  * ~130 staples so the app is useful the moment it opens, with no network and no account.

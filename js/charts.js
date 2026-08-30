@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Ygeia — hand-rolled SVG charts.
  *
  * No charting library. These render a fixed viewBox scaled by CSS, so they stay crisp at
@@ -16,13 +16,51 @@
     return node;
   }
 
-  function frame(w, h) {
+  /*
+   * Every chart is an image with a text alternative.
+   *
+   * Without `role="img"` an inline SVG is exposed to assistive technology as a bag of
+   * unlabelled shapes, so each of these charts previously conveyed exactly nothing to a
+   * screen-reader user — no trend, no range, no last value. `describe()` below builds a
+   * one-sentence summary from the same numbers the chart draws.
+   */
+  function frame(w, h, label) {
     const svg = svgEl('svg', {
       viewBox: `0 0 ${w} ${h}`,
       class: 'chart',
       preserveAspectRatio: 'xMidYMid meet',
+      role: 'img',
+      'aria-label': label || 'Chart',
     });
+    // <title> gives sighted mouse users the same summary as a native tooltip.
+    const title = svgEl('title', {});
+    title.textContent = label || 'Chart';
+    svg.appendChild(title);
     return svg;
+  }
+
+  /**
+   * A one-sentence summary of a series: what it is, where it started and ended, which way
+   * it went, and over how long. Deliberately built from the plotted values rather than
+   * re-derived, so the words and the picture cannot disagree.
+   */
+  function describe(data, o) {
+    const name = o.label || 'Value';
+    const unit = o.unit ? ' ' + o.unit : '';
+    if (!data.length) return `${name} chart, no data yet.`;
+    if (data.length < 2) return `${name} chart, a single reading of ${V.fmt(data[0].value, 1)}${unit}.`;
+
+    const first = data[0].value;
+    const last = data[data.length - 1].value;
+    const values = data.map((d) => d.value);
+    const lo = Math.min(...values);
+    const hi = Math.max(...values);
+    const dir = last > first ? 'rising' : last < first ? 'falling' : 'flat';
+    const days = V.daysBetween(data[0].date, data[data.length - 1].date);
+
+    return `${name} chart, ${data.length} readings over ${days} days, ${dir}. ` +
+           `From ${V.fmt(first, 1)}${unit} to ${V.fmt(last, 1)}${unit}. ` +
+           `Range ${V.fmt(lo, 1)} to ${V.fmt(hi, 1)}${unit}.`;
   }
 
   /**
@@ -36,7 +74,7 @@
     const o = opts || {};
     const W = 340, H = o.height || 120;
     const padL = 4, padR = 4, padT = 10, padB = 16;
-    const svg = frame(W, H);
+    const svg = frame(W, H, o.ariaLabel || describe(data, o));
 
     const all = data.concat(o.projection || []);
     if (data.length < 2) {
@@ -108,7 +146,17 @@
     const o = opts || {};
     const W = 340, H = o.height || 110;
     const padT = 8, padB = 16;
-    const svg = frame(W, H);
+
+    const name = o.label || 'Value';
+    const unit = o.unit ? ' ' + o.unit : '';
+    const total = V.sum(data, (d) => d.value);
+    const summary = !data.length
+      ? `${name} chart, no data yet.`
+      : `${name} bar chart, ${data.length} bars` +
+        (o.target ? `, target ${V.fmt(o.target)}${unit}` : '') +
+        `. Highest ${V.fmt(Math.max(...data.map((d) => d.value)))}${unit}, ` +
+        `average ${V.fmt(total / data.length)}${unit}.`;
+    const svg = frame(W, H, o.ariaLabel || summary);
 
     if (!data.length) return svg;
 
@@ -149,7 +197,15 @@
   charts.sparkline = function (values, opts) {
     const o = opts || {};
     const W = 100, H = o.height || 28;
-    const svg = frame(W, H);
+    const name = o.label || 'Trend';
+    const dir = values.length < 2 ? 'flat'
+      : values[values.length - 1] > values[0] ? 'rising'
+      : values[values.length - 1] < values[0] ? 'falling' : 'flat';
+    const svg = frame(W, H, o.ariaLabel ||
+      (values.length < 2
+        ? `${name}, not enough data.`
+        : `${name} sparkline, ${values.length} points, ${dir}, ` +
+          `ending at ${V.fmt(values[values.length - 1], 1)}.`));
     if (values.length < 2) return svg;
 
     let min = Math.min(...values), max = Math.max(...values);

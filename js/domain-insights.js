@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Ygeia — data analysis and insights.
  *
  * Correlations between the things you log. Pure functions, no DOM, no storage.

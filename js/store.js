@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Ygeia — persistence.
  *
  * IndexedDB, wrapped in promises. No ORM, no dependencies.
@@ -256,6 +256,32 @@
 
     clear(store) {
       return run([store], 'readwrite', (tx) => { tx.objectStore(store).clear(); return true; });
+    },
+
+    /**
+     * Replace the entire contents of several stores, atomically.
+     *
+     * `map` is { storeName: [rows] }. Every named store is cleared and refilled inside ONE
+     * transaction, so if anything is rejected — a bad key, a quota limit, the tab closing
+     * mid-write — IndexedDB aborts the whole thing and the database is left exactly as it was.
+     *
+     * This exists for restore. Doing it as clear-then-write per store in separate
+     * transactions means a failure halfway leaves some stores replaced, one store empty and
+     * the rest untouched, with no way back. For the only recovery path an app with no server
+     * has, that is the wrong shape: a restore must either happen or not happen.
+     */
+    replaceStores(map) {
+      const names = Object.keys(map);
+      if (!names.length) return Promise.resolve(0);
+      return run(names, 'readwrite', (tx) => {
+        let n = 0;
+        for (const name of names) {
+          const st = tx.objectStore(name);
+          st.clear();
+          for (const row of map[name]) { st.put(row); n++; }
+        }
+        return n;
+      });
     },
 
     count(store) {

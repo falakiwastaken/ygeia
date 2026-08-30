@@ -1,4 +1,4 @@
-﻿/* Ygeia — Food: the day's diary, search, portions, custom foods. */
+/* Ygeia — Food: the day's diary, search, portions, custom foods. */
 (function (V) {
   'use strict';
 

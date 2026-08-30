@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Ygeia — bootstrap and router.
  *
  * Loaded last. Seeds the library on first run, wires navigation, and re-renders the
@@ -81,7 +81,15 @@
       V.$('#view-' + id).classList.toggle('active', id === name);
     }
     for (const tab of V.$$('#tabbar .tab')) {
-      tab.classList.toggle('active', tab.dataset.view === name);
+      const current = tab.dataset.view === name;
+      tab.classList.toggle('active', current);
+      /*
+       * The selected tab was previously signalled by colour alone (.tab.active), which
+       * tells a screen reader nothing and fails WCAG 1.4.1 for anyone who cannot separate
+       * sage from grey. aria-current names it.
+       */
+      if (current) tab.setAttribute('aria-current', 'page');
+      else tab.removeAttribute('aria-current');
     }
     app.render();
   };
@@ -192,6 +200,29 @@
       if (document.visibilityState !== 'visible') {
         // Start the auto-lock clock the moment the app is backgrounded.
         V.auth.touch();
+        /*
+         * Blank the screen before the app switcher photographs it.
+         *
+         * iOS and Android both snapshot the last frame for the task-switcher card, and that
+         * card is visible without unlocking anything. A passcode that gates the app but
+         * leaves yesterday's food log, a weight or a blood-pressure reading legible in the
+         * switcher is the usual way a phone app lock is defeated in practice — no devtools
+         * required, just the button people press to change apps.
+         *
+         * Synchronous on purpose: the snapshot is taken almost immediately, so there is no
+         * room to await a lookup here.
+         */
+        if (V.auth.hasPasscode()) document.documentElement.setAttribute('data-redacted', '');
+        /*
+         * Record whether the day on screen was the current one, so that coming back after
+         * midnight rolls it forward — while a day the user deliberately navigated to is
+         * left where they put it.
+         *
+         * This flag was read below and assigned nowhere in the app, so it was permanently
+         * undefined and the rollover never fired once: leave Ygeia open overnight and the
+         * next morning's logging went silently into yesterday.
+         */
+        app.state.wasToday = app.state.date === V.today();
         return;
       }
       if (app.state.date !== V.today() && app.state.wasToday) {
@@ -204,6 +235,8 @@
         V.ui.closeSheet(true);
         await V.lockScreen.requireUnlock();
       }
+      // Only now, once the lock screen (if any) has been satisfied, does the content come back.
+      document.documentElement.removeAttribute('data-redacted');
       app.render();
     });
 
@@ -288,7 +321,42 @@
     );
   }
 
+  /**
+   * Ask the browser not to evict the database.
+   *
+   * Without this the origin's storage is "best effort", which means the browser is free to
+   * delete the whole of IndexedDB under storage pressure without asking and without warning.
+   * For an app whose entire premise is that your health data lives here and nowhere else,
+   * that is the single largest durability gap there is — and the app was nagging people to
+   * take backups while never once asking the browser not to delete the thing being backed up.
+   *
+   * Best effort by design: Safari grants it automatically for Home Screen web apps, Chrome
+   * decides from engagement, and a refusal is not an error worth interrupting anyone over.
+   */
+  async function requestPersistence() {
+    try {
+      if (!navigator.storage || !navigator.storage.persist) return;
+      if (await navigator.storage.persisted()) return;
+      await navigator.storage.persist();
+    } catch (err) {
+      console.warn('[Ygeia] persistent storage request failed:', err);
+    }
+  }
+
   async function boot() {
+    /*
+     * A promise rejected with nobody listening used to vanish into the console. Several
+     * paths in the app are fire-and-forget async writes, so this is the difference between
+     * a save that silently failed and one the user is told about.
+     */
+    window.addEventListener('unhandledrejection', (e) => {
+      console.error('[Ygeia] unhandled rejection:', e.reason);
+      const msg = e.reason && e.reason.name === 'QuotaExceededError'
+        ? 'Storage is full — some data could not be saved. Export a backup and free some space.'
+        : 'Something went wrong. If it keeps happening, export a backup.';
+      V.toast(msg);
+    });
+
     try {
       await V.store.open();
     } catch (err) {
@@ -296,6 +364,8 @@
       showStorageFailure(err);
       return;
     }
+
+    requestPersistence();
 
     /*
      * If another tab upgrades the schema while this one is running, our connection is

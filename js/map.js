@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Ygeia — minimal slippy map.
  *
  * Renders OpenStreetMap raster tiles with drag-to-pan and zoom, in about 150 lines.

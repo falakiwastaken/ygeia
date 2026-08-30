@@ -31,33 +31,34 @@
 </div>
 <div id="out"></div>
 
-<script src="js/util.js?v=37"></script>
-<script src="js/domain.js?v=37"></script>
-<script src="js/domain-life.js?v=37"></script>
-<script src="js/domain-cut.js?v=37"></script>
-<script src="js/domain-study.js?v=37"></script>
-<script src="js/domain-rank.js?v=37"></script>
-<script src="js/domain-plan.js?v=37"></script>
-<script src="js/domain-insights.js?v=37"></script>
-<script src="js/domain-timeline.js?v=37"></script>
-<script src="js/domain-gaps.js?v=37"></script>
-<script src="js/domain-vitals.js?v=37"></script>
-<script src="js/domain-sound.js?v=37"></script>
-<script src="js/domain-load.js?v=37"></script>
-<script src="js/domain-notebook.js?v=37"></script>
-<script src="js/domain-features.js?v=37"></script>
-<script src="js/data-daily.js?v=37"></script>
-<script src="js/ai-prompt.js?v=37"></script>
-<script src="js/ai-providers.js?v=37"></script>
-<script src="js/ai-vision.js?v=37"></script>
-<script src="js/map.js?v=37"></script>
-<script src="js/data-foods.js?v=37"></script>
-<script src="js/data-exercises.js?v=37"></script>
-<script src="js/food-parser.js?v=37"></script>
-<script src="js/data-meals.js?v=37"></script>
-<script src="js/data-programs.js?v=37"></script>
+<script src="js/util.js?v=38"></script>
+<script src="js/domain.js?v=38"></script>
+<script src="js/domain-life.js?v=38"></script>
+<script src="js/domain-cut.js?v=38"></script>
+<script src="js/domain-study.js?v=38"></script>
+<script src="js/domain-rank.js?v=38"></script>
+<script src="js/domain-plan.js?v=38"></script>
+<script src="js/domain-insights.js?v=38"></script>
+<script src="js/domain-timeline.js?v=38"></script>
+<script src="js/domain-gaps.js?v=38"></script>
+<script src="js/domain-vitals.js?v=38"></script>
+<script src="js/domain-sound.js?v=38"></script>
+<script src="js/domain-load.js?v=38"></script>
+<script src="js/domain-notebook.js?v=38"></script>
+<script src="js/domain-features.js?v=38"></script>
+<script src="js/data-daily.js?v=38"></script>
+<script src="js/ai-prompt.js?v=38"></script>
+<script src="js/ai-providers.js?v=38"></script>
+<script src="js/ai-vision.js?v=38"></script>
+<script src="js/map.js?v=38"></script>
+<script src="js/data-foods.js?v=38"></script>
+<script src="js/data-exercises.js?v=38"></script>
+<script src="js/food-parser.js?v=38"></script>
+<script src="js/data-meals.js?v=38"></script>
+<script src="js/data-programs.js?v=38"></script>
+<script src="js/backup.js?v=38"></script>
 <script>
-(function () {
+(async function () {
   'use strict';
   const D = V.domain;
   const out = document.getElementById('out');
@@ -323,14 +324,37 @@
   const card = V.study.newReviewItem('s1', 'test');
   t('new card starts in box 0', card.box, 0);
   t('new card is due in 1 day', V.daysBetween(V.today(), card.dueDate), 1);
-  const passed = V.study.gradeReview(card, true);
+  // Grading is anchored to the later of today and the card's own due date, so these use
+  // cards that are actually due — which is the case the intervals are specified for.
+  const due = (box) => ({ box, dueDate: V.today(), reviews: 0, lapses: 0 });
+
+  const passed = V.study.gradeReview(due(0), true);
   t('recall promotes to box 1', passed.box, 1);
   t('box 1 is due in 3 days', V.daysBetween(V.today(), passed.dueDate), 3);
-  const box3 = V.study.gradeReview(V.study.gradeReview(passed, true), true);
+  const box3 = V.study.gradeReview(due(2), true);
   t('three passes reach box 3', box3.box, 3);
   t('box 3 is due in 16 days', V.daysBetween(V.today(), box3.dueDate), 16);
   t('forgetting resets to box 0', V.study.gradeReview(box3, false).box, 0);
   t('a lapse is recorded', V.study.gradeReview(box3, false).lapses, 1);
+
+  /*
+   * Reviewing early must not compress the schedule.
+   *
+   * The flashcard decks let you study every card in a deck, not just the due ones, so this
+   * is the normal path rather than an edge case. Scheduling from today would mean a card
+   * comfortably 30 days out came back in 16 the moment you studied its deck, and the
+   * expanding intervals the whole method depends on would collapse a little every session.
+   */
+  const early = { box: 2, dueDate: V.addDays(V.today(), 10), reviews: 5, lapses: 0 };
+  t('reviewing early counts from the due date, not today',
+    V.daysBetween(V.today(), V.study.gradeReview(early, true).dueDate), 26);
+  t('reviewing early never shortens the interval',
+    V.study.gradeReview(early, true).dueDate > early.dueDate, true);
+  t('an overdue card still counts from today',
+    V.daysBetween(V.today(),
+      V.study.gradeReview({ box: 2, dueDate: V.addDays(V.today(), -9) }, true).dueDate), 16);
+  t('a lapse rebuilds from today whatever the due date said',
+    V.daysBetween(V.today(), V.study.gradeReview(early, false).dueDate), 1);
   t('only due cards are returned',
     V.study.dueItems([{ dueDate: V.today() }, { dueDate: V.addDays(V.today(), 5) }]).length, 1);
   t('re-reading is discounted vs recall',
@@ -1588,6 +1612,63 @@
     leak('Try to answer that step yourself first.') ? 0 : 1, 1);
   t('empty text is not a leak', leak('') ? 0 : 1, 1);
   t('null is survivable', leak(null) ? 0 : 1, 1);
+
+
+  // =====================================================================
+  group('Encrypted backup');
+  /*
+   * This path had no coverage at all, and was broken.
+   *
+   * b64() was `btoa(String.fromCharCode.apply(null, bytes))`, which spreads every byte into
+   * an argument list — capped around 65k arguments in JavaScriptCore and 125k in V8. Any
+   * real database threw RangeError, and because the plain-text export does not go through
+   * that helper, the failure quietly steered people towards the UNENCRYPTED file. The size
+   * used below is chosen to sit well past both limits, so this test fails on the old code.
+   */
+  if (!V.backup.available()) {
+    t('crypto unavailable — served over http:// rather than localhost?', 0, 1);
+  } else {
+    const pass12 = 'correct-horse-battery';
+
+    // ~1.5 MB of JSON: comfortably past both argument limits.
+    const big = { version: 1, exportedAt: new Date().toISOString(), stores: {
+      foodLogs: Array.from({ length: 6000 }, (_, i) => ({
+        id: 'f' + i, date: '2026-01-01', meal: 'lunch', note: 'a portion of something',
+        nutrients: { kcal: 500 + i, protein: 30, carbs: 60, fat: 20 },
+      })),
+    } };
+    const bigJson = JSON.stringify(big).length;
+    t('the fixture is past the argument limit', bigJson > 400000 ? 1 : 0, 1);
+
+    const env = await V.backup.encrypt(big, pass12);
+    t('a large payload encrypts at all', env && env.data ? 1 : 0, 1);
+    t('the envelope names its cipher', env.cipher.name === 'AES-GCM' ? 1 : 0, 1);
+    t('the envelope records its iteration count', env.kdf.iterations, 600000);
+    t('iterations meet the SHA-256 recommendation', env.kdf.iterations >= 600000 ? 1 : 0, 1);
+    t('salt and iv are not reused across exports',
+      (await V.backup.encrypt(big, pass12)).kdf.salt !== env.kdf.salt ? 1 : 0, 1);
+
+    const back = await V.backup.decrypt(env, pass12);
+    t('a large payload round-trips intact', JSON.stringify(back).length, bigJson);
+    t('the rows survive', back.stores.foodLogs.length, 6000);
+    t('the last row survives unchanged', back.stores.foodLogs[5999].nutrients.kcal, 6499);
+
+    let rejected = 0;
+    try { await V.backup.decrypt(env, 'the-wrong-passphrase'); } catch (e) { rejected = 1; }
+    t('the wrong passphrase is refused', rejected, 1);
+
+    // AES-GCM authenticates, so a flipped byte must fail rather than decrypt to rubbish.
+    const tampered = Object.assign({}, env, {
+      data: env.data.slice(0, 40) + (env.data[40] === 'A' ? 'B' : 'A') + env.data.slice(41),
+    });
+    let caught = 0;
+    try { await V.backup.decrypt(tampered, pass12); } catch (e) { caught = 1; }
+    t('a tampered payload is refused', caught, 1);
+
+    let short = 0;
+    try { await V.backup.encrypt({ stores: {} }, 'short'); } catch (e) { short = 1; }
+    t('a passphrase under 12 characters is refused', short, 1);
+  }
 
   // =====================================================================
   const summary = document.createElement('div');

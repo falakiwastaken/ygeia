@@ -73,9 +73,20 @@
     return (await V.store.db.get('kv', 'auth')) || null;
   }
 
+  /*
+   * A synchronous mirror of `isSet()`.
+   *
+   * `visibilitychange` has to decide whether to hide the screen before the app-switcher
+   * snapshot is taken, and awaiting an IndexedDB read there is a race it can lose. This is
+   * kept in step by every path that changes the passcode.
+   */
+  let passcodeSet = false;
+  A.hasPasscode = () => passcodeSet;
+
   A.isSet = async function () {
     const r = await record();
-    return !!(r && r.verifier);
+    passcodeSet = !!(r && r.verifier);
+    return passcodeSet;
   };
 
   /** Create or replace the passcode. Changing it requires the current one. */
@@ -100,6 +111,7 @@
       failures: 0,
       lockedUntil: 0,
     });
+    passcodeSet = true;
     return true;
   };
 
@@ -107,6 +119,7 @@
     const ok = await A.verify(currentPasscode);
     if (!ok.ok) throw new Error('Passcode is wrong.');
     await V.store.db.remove('kv', 'auth');
+    passcodeSet = false;
     return true;
   };
 

@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Ygeia — Open Food Facts client.
  *
  * Free, open database of ~3M packaged products. No API key, no account, no rate-limit
