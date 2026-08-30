@@ -37,8 +37,9 @@ Soft parchment-and-sage theme by default, with a forest-night dark mode.
 **Strength training**
 - 114 bundled exercises across every muscle group and equipment type
 - Live workout logging: weight, reps, RPE, warm-up / drop / to-failure set types
-- Rest timer with an audible cue, using wall-clock deadlines so background throttling
-  can't make it drift
+- Rest timer using wall-clock deadlines so background throttling can't make it drift. It
+  holds the screen awake for the duration, and if you have put the phone down it sends a
+  notification rather than beeping at an app nobody is looking at
 - Plate calculator that tells you when a target weight isn't loadable with your plates
 - Estimated 1RM (blended Brzycki/Epley), automatic PR detection, progression charts
 - Double-progression suggestions: add reps first, then load
@@ -111,6 +112,9 @@ Soft parchment-and-sage theme by default, with a forest-night dark mode.
   standard behind the headphone notifications on iPhone
 - Decibels are averaged by energy, never arithmetically: a day of 60 dB and 90 dB is 87 dB
   of exposure, not 75. Getting this wrong understates noise, always in the unsafe direction
+- The screen is held awake while measuring. It is driven by requestAnimationFrame, which
+  stops when the screen sleeps — so without that the meter would sit there looking like it
+  was running while measuring nothing
 - The readings are labelled as estimates, out loud. A phone microphone has no published
   sensitivity and most compress and then clip above roughly 100 dBA, which is exactly where
   the answer matters most. There is a calibration offset for anyone with a real meter
@@ -207,7 +211,9 @@ Soft parchment-and-sage theme by default, with a forest-night dark mode.
 
 **Data**
 - Import your Apple Health export (see below)
-- One-tap download of everything, plus password-encrypted backups safe for cloud storage
+- One-tap download of everything, plus password-encrypted backups safe for cloud storage —
+  AES-GCM under a PBKDF2-SHA-256 key at 600,000 iterations, with the whole scheme written
+  out in `js/backup.js` so the file is recoverable with a short script if this app vanishes
 - Backup reminders, because with no server a backup is the only recovery path there is
 - One-tap erase
 
@@ -312,7 +318,7 @@ coach or a doctor.
 
 ```
 index.html              app shell and script order
-tests.html              477 assertions — open it in a browser, no runner needed
+tests.html              698 assertions — open it in a browser, no runner needed
 css/app.css             design system — every colour is a token
 js/util.js              DOM, date and unit helpers
 js/store.js             IndexedDB wrapper and repositories
@@ -326,6 +332,7 @@ js/domain-sound.js      decibel arithmetic, NIOSH/WHO exposure limits
 js/domain-load.js       cardio load, strength load, daily strain
 js/domain-notebook.js   stroke simplification and whiteboard geometry
 js/domain-features.js   which features are on, and what that hides
+js/platform.js          wake lock, notifications, badging, share, view transitions
 js/data-foods.js        bundled offline food library
 js/data-exercises.js    bundled exercise library
 js/data-daily.js        daily question bank and facts
