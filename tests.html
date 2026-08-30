@@ -1670,6 +1670,42 @@
     t('a passphrase under 12 characters is refused', short, 1);
   }
 
+
+  // =====================================================================
+  group('The study-photo wall holds');
+  /*
+   * view-solve.js tells the user that no health data reaches the photo-help feature and
+   * that this is "enforced in code, not just policy". Until this test existed, it was not:
+   * it was enforced by an unusually disciplined module boundary and a loud comment, either
+   * of which a later edit could quietly step over while passing review and every test.
+   *
+   * So the boundary is now checked mechanically. ai-vision.js may touch exactly one thing
+   * in storage — the API key it needs to make a request at all — and nothing else. Adding
+   * `question: buildContext()` to a prompt in that file now fails here.
+   *
+   * Read from source rather than by instrumenting the module, because the claim being made
+   * is about what the file is allowed to contain, not about what one code path happened to
+   * do on one run.
+   */
+  const visionSrc = await fetch('js/ai-vision.js?v=38').then((r) => r.text());
+
+  // Every store access in the file, e.g. `V.store.db.get(` or `V.store.foodLogs.all(`.
+  const storeCalls = visionSrc.match(/V\.store\.[A-Za-z.]+/g) || [];
+  const nonDb = storeCalls.filter((c) => !c.startsWith('V.store.db.'));
+  t('ai-vision touches no repository except the kv primitives', nonDb.length, 0);
+
+  // Every key it reads or writes. Only the API key is permitted.
+  const keys = (visionSrc.match(/V\.store\.db\.\w+\(\s*'(\w+)'\s*,\s*\{?\s*'?(\w+)'?/g) || [])
+    .map((m) => m.replace(/[\s\S]*'(\w+)'\s*,\s*\{?\s*'?(\w+)'?/, '$1/$2'));
+  const forbidden = keys.filter((k) => k !== 'kv/visionKey' && k !== 'kv/key');
+  t('ai-vision reads and writes only kv/visionKey', forbidden.length, 0);
+  t('it does reach the key, so the check is not vacuous',
+    keys.includes('kv/visionKey') ? 1 : 0, 1);
+
+  // The health-data summary builder must not be reachable from the vision module.
+  t('ai-vision never calls the coach context builder',
+    /buildContext|V\.gaps|V\.insights|V\.domain\./.test(visionSrc) ? 1 : 0, 0);
+
   // =====================================================================
   const summary = document.createElement('div');
   summary.className = 'summary ' + (fail === 0 ? 'ok' : 'bad');

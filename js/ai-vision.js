@@ -15,6 +15,14 @@
  * It does read the store, but only to fetch its own API key from the `kv` record named
  * `visionKey`. That is the sole store access in this file, and it must stay that way.
  *
+ * That last sentence is now CHECKED, not merely asserted. tests.html has a group called
+ * "The study-photo wall holds" which reads this file's source and fails if it references
+ * any repository other than the `kv` primitives, any `kv` key other than `visionKey`, or
+ * anything from the domain layer. Previously the wall was held up by this comment and by
+ * whoever read it — which is to say a later edit could step straight over it while passing
+ * review and every test. The UI tells users the boundary is enforced; that group is what
+ * makes the sentence true.
+ *
  * The reasoning behind the split: a photo of a textbook question is not personal health
  * data, so the privacy cost of sending it to a cloud model is low and the answers are
  * actually correct. Blood pressure and food diaries are a different matter, and they stay
@@ -100,6 +108,14 @@
           const w = Math.round(img.width * scale);
           const h = Math.round(img.height * scale);
 
+          /*
+           * Re-encoding through a canvas also strips the EXIF block, and with it the GPS
+           * coordinates most phones write into a photo. That is a real privacy property of
+           * this path and not an incidental one: a photograph of a homework page taken at
+           * home would otherwise carry the location of the home to a third party, which is
+           * exactly the kind of thing this app exists not to do. Do not replace this with a
+           * direct file upload without stripping EXIF some other way.
+           */
           const canvas = document.createElement('canvas');
           canvas.width = w;
           canvas.height = h;

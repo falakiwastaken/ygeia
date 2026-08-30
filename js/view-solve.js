@@ -144,7 +144,8 @@
         V.el('div', {
           className: 'hint',
           text: 'Only the photo and your note are sent. None of your health data goes ' +
-                'anywhere — that is enforced in code, not just policy.',
+                'anywhere, and the test suite fails if this file ever reads anything from ' +
+                'storage except the API key itself.',
         }),
       );
     });

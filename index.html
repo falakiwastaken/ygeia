@@ -18,8 +18,18 @@
   with full IndexedDB access and could not be pinned with an integrity hash, so removing it
   removed the only way untrusted code could ever reach your data.
 
-  connect-src then enumerates every host anything on this page may talk to, so even a
-  cross-site scripting bug has nowhere to send what it reads.
+  connect-src then enumerates every host anything on this page may talk to.
+
+  Be careful about what that does and does not buy, because it is easy to overclaim and
+  this comment used to: it said a cross-site scripting bug would have "nowhere to send what
+  it reads". That is not true. Four of the allowed hosts accept attacker-shaped requests —
+  both AI endpoints take an arbitrary POST body with a caller-supplied key, Overpass takes
+  a POST body, and Nominatim takes a query string. Injected code running in this origin
+  could use any of them as an egress channel.
+
+  What the CSP genuinely prevents is untrusted code being LOADED in the first place, which
+  is a stronger guarantee and the one worth defending. Exfiltration is held off by there
+  being no third-party script here to do it, not by this list.
 
   If you add a network call, add its host here or it will silently fail.
 -->

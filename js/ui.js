@@ -100,17 +100,93 @@
     );
   }
 
+  /*
+   * Focus management.
+   *
+   * #sheet has declared role="dialog" aria-modal="true" since it was written, and nothing
+   * ever enforced it: focus stayed on whatever button opened the sheet, Tab walked straight
+   * out of the "modal" into the tab bar behind it, a screen reader could swipe through the
+   * whole app underneath, and closing dropped focus to <body> so a keyboard user restarted
+   * from the top of the page every time.
+   *
+   * This is done with `inert` plus a Tab trap rather than by converting to <dialog>.
+   * <dialog>.showModal() would supply all of it natively and delete code — but it renders
+   * in the top layer, which is above every z-index, and #lock-screen is a plain element at
+   * z-index 100. A sheet promoted to the top layer would therefore paint OVER the passcode
+   * gate. Fixing that means converting the lock screen too and getting their order right,
+   * which is not a change to make casually to the thing standing between a stranger and
+   * someone's health record.
+   */
+  const FOCUSABLE = [
+    'a[href]', 'button:not([disabled])', 'input:not([disabled])', 'select:not([disabled])',
+    'textarea:not([disabled])', '[tabindex]:not([tabindex="-1"])',
+  ].join(',');
+
+  /** Whatever had focus when the first sheet in a stack opened, so it can be handed back. */
+  let restoreFocusTo = null;
+
+  const backgroundEls = () => [V.$('.app-header'), V.$('#views'), V.$('#tabbar')].filter(Boolean);
+
+  function setBackgroundInert(on) {
+    for (const node of backgroundEls()) {
+      if (on) node.setAttribute('inert', '');
+      else node.removeAttribute('inert');
+    }
+  }
+
+  /** Move focus into the sheet: the first real control, or the panel itself. */
+  function focusIntoSheet() {
+    const panel = V.$('#sheet');
+    if (!panel) return;
+    const body = V.$('#sheet-body');
+    const first = body && body.querySelector(FOCUSABLE);
+    // Prefer a control inside the body over the close button, which is the least useful
+    // thing to land on, but fall back to the panel so focus is never left outside.
+    (first || panel).focus({ preventScroll: true });
+  }
+
+  /*
+   * Keep Tab inside the sheet. `inert` already stops the background taking focus in
+   * browsers that support it; this closes the loop at the ends of the sheet's own order
+   * and covers the rest.
+   */
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab' || !sheetStack.length) return;
+    const panel = V.$('#sheet');
+    if (!panel) return;
+    const items = Array.from(panel.querySelectorAll(FOCUSABLE))
+      .filter((n) => n.offsetParent !== null || n === document.activeElement);
+    if (!items.length) { e.preventDefault(); panel.focus({ preventScroll: true }); return; }
+
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (e.shiftKey && (document.activeElement === first || document.activeElement === panel)) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  });
+
   function renderSheet() {
     const backdrop = V.$('#sheet-backdrop');
     const body = V.$('#sheet-body');
     const top = sheetStack[sheetStack.length - 1];
 
+    const wasClosed = backdrop.hidden;
+
     unmount();
     if (!top) { backdrop.hidden = true; return; }
+
+    // Remember the opener only for the outermost sheet — a nested sheet should hand focus
+    // back to the sheet that opened it, not all the way out to the view behind.
+    if (wasClosed) restoreFocusTo = document.activeElement;
 
     V.$('#sheet-title').textContent = top.title;
     body.innerHTML = '';
     backdrop.hidden = false;
+    setBackgroundInert(true);
     mounted = top;
 
     /*
@@ -136,6 +212,16 @@
       });
     }
     body.scrollTop = top.scroll || 0;
+
+    /*
+     * After the builder has run, so there is something to focus. Async builders have not
+     * populated the body yet at this point, so this runs again on the next frame — landing
+     * on the panel first is still correct, and much better than leaving focus outside.
+     */
+    focusIntoSheet();
+    // setTimeout rather than requestAnimationFrame: rAF is throttled to nothing while the
+    // page is hidden, and this must still settle focus correctly when the app is restored.
+    setTimeout(() => { if (mounted === top) focusIntoSheet(); }, 0);
   }
 
   /** Close the top sheet, revealing whatever was underneath. */
@@ -146,6 +232,13 @@
       unmount();
       V.$('#sheet-backdrop').hidden = true;
       V.$('#sheet-body').innerHTML = '';
+      setBackgroundInert(false);
+      // Hand focus back to whatever opened the sheet, so a keyboard user carries on from
+      // where they were instead of restarting at the top of the page.
+      if (restoreFocusTo && document.contains(restoreFocusTo)) {
+        restoreFocusTo.focus({ preventScroll: true });
+      }
+      restoreFocusTo = null;
     } else {
       renderSheet();
     }
