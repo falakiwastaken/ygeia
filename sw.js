@@ -28,6 +28,7 @@ const SHELL = [
   './manifest.webmanifest',
   './css/app.css?v=38',
   './js/util.js?v=38',
+  './js/platform.js?v=38',
   './js/store.js?v=38',
   './js/auth.js?v=38',
   './js/domain.js?v=38',
@@ -88,6 +89,7 @@ const SHELL = [
   // splash screen have no icon when offline.
   './icons/icon-192.png',
   './icons/icon-512.png',
+  './icons/icon-maskable-512.png',
 ];
 
 /*

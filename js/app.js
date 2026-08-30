@@ -76,10 +76,28 @@
 
   app.go = function (name) {
     if (!VIEW_IDS.includes(name)) return;
+    // Only an actual change is worth animating. boot() and applyFeatures() both call
+    // go() with the view that is already current, and those must still render.
+    const changed = app.state.view !== name;
     app.state.view = name;
-    for (const id of VIEW_IDS) {
-      V.$('#view-' + id).classList.toggle('active', id === name);
-    }
+
+    const swap = () => {
+      for (const id of VIEW_IDS) {
+        V.$('#view-' + id).classList.toggle('active', id === name);
+      }
+    };
+
+    /*
+     * Cross-fade the tab change with a View Transition where the browser has one.
+     *
+     * The swap itself is unchanged — this only wraps it, so browsers without the API behave
+     * exactly as before, and so does anyone with prefers-reduced-motion set
+     * (V.platform.transition checks both). The CSS keyframe fade on .view.active remains
+     * the fallback.
+     */
+    if (changed) V.platform.transition(swap);
+    else swap();
+
     for (const tab of V.$$('#tabbar .tab')) {
       const current = tab.dataset.view === name;
       tab.classList.toggle('active', current);
@@ -392,7 +410,23 @@
 
     wireChrome();
     await app.applyFeatures();
-    app.go('today');
+
+    /*
+     * App shortcuts (long-press the installed icon) arrive as ?go=<tab>.
+     *
+     * Checked against the tabs that are actually visible, so a shortcut for a feature the
+     * user has since switched off lands on Today rather than on an empty tab they chose not
+     * to have. The parameter is then stripped from the URL, so a later reload — or the
+     * install prompt's start_url — does not silently re-trigger it.
+     */
+    let landing = 'today';
+    try {
+      const want = new URLSearchParams(location.search).get('go');
+      if (want && app.visibleTabs().includes(want)) landing = want;
+      if (want) history.replaceState(null, '', location.pathname + location.hash);
+    } catch (err) { /* a malformed query string is not worth failing boot over */ }
+
+    app.go(landing);
 
     // First run: ask for the body the calculations need. Every step is skippable, and it
     // renders over a working app rather than blocking it.

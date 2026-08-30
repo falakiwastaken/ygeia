@@ -1,19 +1,49 @@
-﻿{
+{
+  "id": "./",
   "name": "Ygeia — Lifestyle Tracker",
   "short_name": "Ygeia",
   "description": "Free, open-source, offline-first lifestyle tracker. Nutrition, lifting, sport, sleep and study. Your data never leaves your device.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait",
+  "display_override": ["standalone", "minimal-ui"],
   "background_color": "#F6F2E8",
   "theme_color": "#F6F2E8",
   "categories": ["health", "fitness", "lifestyle", "education"],
+  "launch_handler": { "client_mode": "navigate-existing" },
+
+  "shortcuts": [
+    {
+      "name": "Log food",
+      "short_name": "Food",
+      "description": "Add something you have eaten",
+      "url": "./?go=food"
+    },
+    {
+      "name": "Start a workout",
+      "short_name": "Train",
+      "description": "Log sets as you lift",
+      "url": "./?go=train"
+    },
+    {
+      "name": "Study",
+      "short_name": "Study",
+      "description": "Focus block, flashcards and sleep",
+      "url": "./?go=study"
+    },
+    {
+      "name": "Body and vitals",
+      "short_name": "Body",
+      "description": "Weight, heart rate and trends",
+      "url": "./?go=body"
+    }
+  ],
+
   "icons": [
-    { "src": "icons/icon-180.png", "sizes": "180x180", "type": "image/png" },
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
-    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+    { "src": "icons/icon-180.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ]
 }

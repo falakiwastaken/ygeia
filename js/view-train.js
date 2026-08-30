@@ -47,6 +47,19 @@
     // throttled hard in background tabs, so a tick-based countdown drifts badly.
     const endsAt = Date.now() + seconds * 1000;
 
+    /*
+     * Keep the screen on for the duration, and arrange a notification for the case where it
+     * is put face-down anyway.
+     *
+     * Between sets is precisely when nobody is touching the phone, so the screen used to
+     * dim and sleep through the whole rest period; and once the app is backgrounded the
+     * beep-haptic-toast at zero needs a foreground page to be heard at all. Asking for
+     * notification permission here rather than at boot means the prompt arrives attached to
+     * the thing it is for.
+     */
+    V.platform.keepAwake('rest-timer');
+    V.platform.requestNotifications();
+
     V.ui.sheet('Rest', (body) => {
       const display = V.el('div', { className: 'timer-big' });
       body.appendChild(display);
@@ -64,15 +77,34 @@
         const left = Math.max(0, Math.round((restTimer.endsAt - Date.now()) / 1000));
         display.textContent = Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0');
         if (left <= 0) {
+          const wasHidden = document.visibilityState !== 'visible';
           stopRest();
           beep();
           V.haptic(200);
+          // A toast nobody can see is not a cue. If the app is in the background, the
+          // notification is the only thing that will actually reach them.
+          if (wasHidden) {
+            V.platform.notify('Rest complete', {
+              body: 'Back to it.',
+              tag: 'ygeia-rest',
+              requireInteraction: false,
+            });
+          }
           V.toast('Rest complete');
           V.ui.closeSheet();
         }
       }
 
       restTimer = { endsAt, handle: setInterval(tick, 250) };
+
+      /*
+       * The sheet can be dismissed six ways and only one of them went through Skip, so
+       * closing it with the x, the backdrop or Escape left the interval running and the
+       * wake lock held — the timer would then fire its beep and call closeSheet() on
+       * whatever sheet happened to be open by then.
+       */
+      V.ui.onSheetTeardown(stopRest);
+
       tick();
     });
   }
@@ -80,6 +112,7 @@
   function stopRest() {
     if (restTimer) clearInterval(restTimer.handle);
     restTimer = null;
+    V.platform.releaseWakeLock('rest-timer');
   }
 
   // ========================================================= plate calculator

@@ -28,6 +28,7 @@
       async function finish(completed) {
         if (focusTimer) clearInterval(focusTimer.handle);
         focusTimer = null;
+        V.platform.releaseWakeLock('focus-timer');
         const minutes = Math.max(1, Math.round((Date.now() - startedAt) / 60000));
 
         await V.store.study.saveSession({
@@ -51,6 +52,7 @@
       body.appendChild(V.ui.button('Cancel', () => {
         if (focusTimer) clearInterval(focusTimer.handle);
         focusTimer = null;
+        V.platform.releaseWakeLock('focus-timer');
         V.ui.closeSheet();
       }, 'btn-ghost'));
 
@@ -59,12 +61,34 @@
         display.textContent = Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0');
         if (left <= 0) {
           V.haptic(200);
+          // A focus block is time spent deliberately not looking at the phone, so the
+          // end of one is the case where a background notification matters most.
+          if (document.visibilityState !== 'visible') {
+            V.platform.notify('Focus block complete', {
+              body: `${subject.name} — take ${preset.breakMin} minutes.`,
+              tag: 'ygeia-focus',
+            });
+          }
           V.toast(`Block complete — take ${preset.breakMin} minutes`);
           finish(true);
         }
       }
 
       focusTimer = { endsAt, handle: setInterval(tick, 250) };
+
+      /*
+       * A focus block is the longest the screen goes untouched anywhere in the app, so it
+       * is the one that most needs the screen kept on — and the teardown covers dismissal
+       * routes that neither Finish nor Cancel go through.
+       */
+      V.platform.keepAwake('focus-timer');
+      V.platform.requestNotifications();
+      V.ui.onSheetTeardown(() => {
+        if (focusTimer) clearInterval(focusTimer.handle);
+        focusTimer = null;
+        V.platform.releaseWakeLock('focus-timer');
+      });
+
       tick();
     });
   }

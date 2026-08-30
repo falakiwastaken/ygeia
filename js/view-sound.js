@@ -105,6 +105,7 @@
         if (stream) { for (const t of stream.getTracks()) t.stop(); stream = null; }
         // close() returns a promise that can reject if the context is already closing.
         if (audioCtx) { const c = audioCtx; audioCtx = null; c.close().catch(() => {}); }
+        V.platform.releaseWakeLock('sound-meter');
       }
       V.ui.onSheetTeardown(stop);
 
@@ -171,6 +172,17 @@
         running = true;
         startedAt = Date.now();
         toggleBtn.textContent = 'Stop';
+
+        /*
+         * Hold the screen on for the duration of a measurement.
+         *
+         * This is not comfort. The loop below is driven by requestAnimationFrame, which
+         * stops being called the moment the screen sleeps — so the meter would sit there
+         * looking like it was running while measuring nothing, and the exposure total it
+         * feeds would quietly under-count. An instrument that stops reading without saying
+         * so is worse than one that refuses to start.
+         */
+        V.platform.keepAwake('sound-meter');
 
         function tick() {
           if (!running) return;
