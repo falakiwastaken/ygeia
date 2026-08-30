@@ -183,9 +183,26 @@
    */
   P.transition = function (update) {
     const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (!document.startViewTransition || reduced) return Promise.resolve(update());
+    /*
+     * Skip the animation when the page is hidden. A transition started on a hidden document
+     * is aborted immediately with InvalidStateError, and there is nothing to look at anyway.
+     */
+    const hidden = document.visibilityState !== 'visible';
+    if (!document.startViewTransition || reduced || hidden) return Promise.resolve(update());
+
     try {
-      return document.startViewTransition(update).finished.catch(() => {});
+      const t = document.startViewTransition(update);
+      /*
+       * A ViewTransition exposes three promises — ready, updateCallbackDone and finished —
+       * and an aborted transition rejects more than one of them. Any left unhandled surfaces
+       * as an unhandled rejection, which the global handler in app.js would then show the
+       * user as a failure toast on an ordinary tab change. Aborting is normal here (a second
+       * transition starting, or the page being hidden mid-animation), so all three are
+       * absorbed. `update` has still run either way — that is guaranteed by the API.
+       */
+      if (t.ready && t.ready.catch) t.ready.catch(() => {});
+      if (t.updateCallbackDone && t.updateCallbackDone.catch) t.updateCallbackDone.catch(() => {});
+      return t.finished.catch(() => {});
     } catch (err) {
       return Promise.resolve(update());
     }

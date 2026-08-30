@@ -31,32 +31,32 @@
 </div>
 <div id="out"></div>
 
-<script src="js/util.js?v=38"></script>
-<script src="js/domain.js?v=38"></script>
-<script src="js/domain-life.js?v=38"></script>
-<script src="js/domain-cut.js?v=38"></script>
-<script src="js/domain-study.js?v=38"></script>
-<script src="js/domain-rank.js?v=38"></script>
-<script src="js/domain-plan.js?v=38"></script>
-<script src="js/domain-insights.js?v=38"></script>
-<script src="js/domain-timeline.js?v=38"></script>
-<script src="js/domain-gaps.js?v=38"></script>
-<script src="js/domain-vitals.js?v=38"></script>
-<script src="js/domain-sound.js?v=38"></script>
-<script src="js/domain-load.js?v=38"></script>
-<script src="js/domain-notebook.js?v=38"></script>
-<script src="js/domain-features.js?v=38"></script>
-<script src="js/data-daily.js?v=38"></script>
-<script src="js/ai-prompt.js?v=38"></script>
-<script src="js/ai-providers.js?v=38"></script>
-<script src="js/ai-vision.js?v=38"></script>
-<script src="js/map.js?v=38"></script>
-<script src="js/data-foods.js?v=38"></script>
-<script src="js/data-exercises.js?v=38"></script>
-<script src="js/food-parser.js?v=38"></script>
-<script src="js/data-meals.js?v=38"></script>
-<script src="js/data-programs.js?v=38"></script>
-<script src="js/backup.js?v=38"></script>
+<script src="js/util.js?v=39"></script>
+<script src="js/domain.js?v=39"></script>
+<script src="js/domain-life.js?v=39"></script>
+<script src="js/domain-cut.js?v=39"></script>
+<script src="js/domain-study.js?v=39"></script>
+<script src="js/domain-rank.js?v=39"></script>
+<script src="js/domain-plan.js?v=39"></script>
+<script src="js/domain-insights.js?v=39"></script>
+<script src="js/domain-timeline.js?v=39"></script>
+<script src="js/domain-gaps.js?v=39"></script>
+<script src="js/domain-vitals.js?v=39"></script>
+<script src="js/domain-sound.js?v=39"></script>
+<script src="js/domain-load.js?v=39"></script>
+<script src="js/domain-notebook.js?v=39"></script>
+<script src="js/domain-features.js?v=39"></script>
+<script src="js/data-daily.js?v=39"></script>
+<script src="js/ai-prompt.js?v=39"></script>
+<script src="js/ai-providers.js?v=39"></script>
+<script src="js/ai-vision.js?v=39"></script>
+<script src="js/map.js?v=39"></script>
+<script src="js/data-foods.js?v=39"></script>
+<script src="js/data-exercises.js?v=39"></script>
+<script src="js/food-parser.js?v=39"></script>
+<script src="js/data-meals.js?v=39"></script>
+<script src="js/data-programs.js?v=39"></script>
+<script src="js/backup.js?v=39"></script>
 <script>
 (async function () {
   'use strict';
@@ -1687,7 +1687,7 @@
    * is about what the file is allowed to contain, not about what one code path happened to
    * do on one run.
    */
-  const visionSrc = await fetch('js/ai-vision.js?v=38').then((r) => r.text());
+  const visionSrc = await fetch('js/ai-vision.js?v=39').then((r) => r.text());
 
   // Every store access in the file, e.g. `V.store.db.get(` or `V.store.foodLogs.all(`.
   const storeCalls = visionSrc.match(/V\.store\.[A-Za-z.]+/g) || [];
