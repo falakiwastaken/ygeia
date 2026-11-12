@@ -13,4 +13,4 @@ echo On your phone (same WiFi), use this machine's IP on port 8123.
 echo Close this window to stop.
 echo.
 
-python -m http.server 8123
+py devserver.py 8123
