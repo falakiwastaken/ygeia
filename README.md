@@ -219,17 +219,25 @@ Soft parchment-and-sage theme by default, with a forest-night dark mode.
 
 ## Running it
 
+
 No build step. No `npm install`. No dependencies. It is plain HTML, CSS and JavaScript.
 
 **Quickest:** open `index.html` in any browser.
 
-**Recommended** (needed for offline caching and iPhone install), serve it over HTTP:
+**For development** (prevents stale browser-cached files), run:
+
+```bash
+python devserver.py 8123
+```
+
+**For offline/PWA testing**, use the standard HTTP server:
 
 ```bash
 python -m http.server 8123
 ```
 
 Then open <http://localhost:8123>.
+
 
 ## Installing on an iPhone
 
